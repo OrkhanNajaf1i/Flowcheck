@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseDefinition } from '../src/definition.ts';
 import { ERROR_CODES } from '../src/errors.ts';
+import { looksGeneratedId } from '../src/locator.ts';
 import { parseTemplate } from '../src/templates.ts';
 
 const base = {
@@ -134,5 +135,42 @@ describe('new step types', () => {
       'must start with "/"',
     );
     expect(issues(step({ type: 'assertUrl', expected: '/done', match: 'fullUrl', query: 'include' })).join()).toContain('http://');
+  });
+});
+
+describe('extra locator kinds', () => {
+  const visible = (locator: unknown) => ({ ...base, steps: [{ id: 'a', name: 'a', type: 'assertVisible', locator }] });
+
+  it('accepts id, attribute, alt text and title locators', () => {
+    expect(issues(visible({ kind: 'id', value: 'account-btn' }))).toEqual([]);
+    expect(issues(visible({ kind: 'attribute', name: 'aria-label', value: 'Hesab' }))).toEqual([]);
+    expect(issues(visible({ kind: 'attribute', name: 'data-qa', value: 'x"y' }))).toEqual([]);
+    expect(issues(visible({ kind: 'altText', value: 'Logo', exact: true }))).toEqual([]);
+    expect(issues(visible({ kind: 'title', value: 'Settings', exact: false }))).toEqual([]);
+  });
+
+  it('rejects attribute names that could inject selector syntax', () => {
+    expect(issues(visible({ kind: 'attribute', name: 'name], body [a', value: 'x' })).length).toBeGreaterThan(0);
+    expect(issues(visible({ kind: 'attribute', name: '', value: 'x' })).length).toBeGreaterThan(0);
+  });
+});
+
+describe('looksGeneratedId', () => {
+  it('flags framework-generated ids and keeps stable ones', () => {
+    for (const id of [
+      'reka-dropdown-menu-trigger-v-31',
+      'menu-trigger-v-31',
+      'nav-12',
+      'field123',
+      ':r5:',
+      'radix-12',
+      'headlessui-menu-button-3',
+      'mui-123',
+    ]) {
+      expect(looksGeneratedId(id), id).toBe(true);
+    }
+    for (const id of ['account-btn', 'login', 'user-menu', 'email-input', 'download', 'added']) {
+      expect(looksGeneratedId(id), id).toBe(false);
+    }
   });
 });

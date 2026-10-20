@@ -73,6 +73,10 @@ assertText (exact/contains, whitespace normalization, empty text ≠ missing ele
 
 Evidence: shared (3 new), engine (4 new), web round-trip (1 new), e2e steps.spec (5) + UI test (1). The full-suite run exposed a real engine bug (a final read with a ~1 ms timeout turned an unmet expectation into INTERNAL_ERROR); fixed with a minimum read time and timeout handling in the poll loop, then verified with 3 repeated runs (45/45).
 
+## Extra locator kinds — done
+
+ID, other attribute (name + exact value), image alt text and title locators, plus a warning for auto-generated ids. Evidence: shared (3 new), web round-trip (extended), e2e steps.spec (1: id, aria-label via role, title, alt, attribute, quote-injection attempt) and UI test (1).
+
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.

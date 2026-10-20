@@ -148,3 +148,35 @@ test.describe('all step types against the demo sign-up form', () => {
     expect(run.steps.find((s) => s.stepId === 'select')?.errorCode).toBe('ACTION_FAILED');
   });
 });
+
+test('extra locator kinds find elements by id, attribute, alt text, title and aria-label', async () => {
+  const { projectId, envId } = await createProjectWithEnv();
+  const run = await runTest(
+    projectId,
+    envId,
+    definition([
+      { id: 'open', name: 'Open form', type: 'navigate', url: '/form' },
+      { id: 'byId', name: 'By id', type: 'assertVisible', locator: { kind: 'id', value: 'account-btn' } },
+      { id: 'byAria', name: 'Icon button by name (aria-label)', type: 'click', locator: { kind: 'role', role: 'button', name: 'Account' } },
+      { id: 'byTitle', name: 'By title', type: 'assertVisible', locator: { kind: 'title', value: 'Your account', exact: true } },
+      { id: 'byAlt', name: 'By alt text', type: 'assertVisible', locator: { kind: 'altText', value: 'Shop logo', exact: true } },
+      {
+        id: 'byAttr',
+        name: 'By name attribute',
+        type: 'fill',
+        locator: { kind: 'attribute', name: 'name', value: 'email' },
+        value: 'qa@example.test',
+      },
+      {
+        id: 'value',
+        name: 'Value typed',
+        type: 'assertValue',
+        locator: { kind: 'attribute', name: 'name', value: 'email' },
+        expected: 'qa@example.test',
+      },
+      // A value with quotes is matched literally and simply finds nothing.
+      { id: 'quotes', name: 'Quoted value', type: 'assertHidden', locator: { kind: 'attribute', name: 'name', value: 'x"] , body [a="' } },
+    ]),
+  );
+  expect(run.status, JSON.stringify(run.steps.filter((s) => s.status !== 'passed'))).toBe('passed');
+});

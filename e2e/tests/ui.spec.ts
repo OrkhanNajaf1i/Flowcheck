@@ -209,3 +209,26 @@ test('new step types can be added in the editor and pass against the demo form',
   await page.getByRole('button', { name: 'Start run' }).click();
   await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
 });
+
+test('choosing an auto-generated id shows a warning; attribute locators have name and value fields', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(projectId, definition([{ id: 'open', name: 'Open form', type: 'navigate', url: '/form' }]));
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await addStep(page, /^Click/);
+  const step = page.getByTestId('step-steps-1');
+  await step.getByLabel('Find the element by').selectOption('id');
+  await step.getByLabel('Element', { exact: true }).fill('reka-dropdown-menu-trigger-v-31');
+  await expect(step.getByText('This id looks auto-generated')).toBeVisible();
+  await step.getByLabel('Element', { exact: true }).fill('account-btn');
+  await expect(step.getByText('This id looks auto-generated')).toHaveCount(0);
+
+  await step.getByLabel('Find the element by').selectOption('attribute');
+  await step.getByLabel('Attribute').fill('aria-label');
+  await step.getByLabel('Value (exact)').fill('Account');
+  await expect(step.getByText('· [aria-label] "Account"')).toBeVisible();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});

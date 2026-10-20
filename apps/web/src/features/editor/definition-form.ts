@@ -27,6 +27,8 @@ export type AssertionKind = ResponseAssertion['kind'];
 export interface LocatorForm {
   kind: LocatorKind;
   value: string;
+  /** Attribute name for kind "attribute" (e.g. name, aria-label, data-qa). */
+  attrName: string;
   role: (typeof ARIA_ROLES)[number];
   exact: boolean;
 }
@@ -105,7 +107,7 @@ export function blankStep(type: StepType = 'navigate', name = ''): StepForm {
     type,
     timeoutMs: '',
     url: '/',
-    locator: { kind: 'testId', value: '', role: 'button', exact: true },
+    locator: { kind: 'testId', value: '', attrName: 'name', role: 'button', exact: true },
     value: '',
     method: 'GET',
     path: '/',
@@ -131,13 +133,16 @@ export function blankAssertion(kind: AssertionKind = 'statusEquals'): AssertionF
 // ---- definition -> form ----
 
 function locatorToForm(locator: Locator): LocatorForm {
-  const base: LocatorForm = { kind: locator.kind, value: '', role: 'button', exact: true };
+  const base: LocatorForm = { kind: locator.kind, value: '', attrName: 'name', role: 'button', exact: true };
   switch (locator.kind) {
     case 'role':
       return { ...base, role: locator.role, value: locator.name };
     case 'testId':
     case 'css':
+    case 'id':
       return { ...base, value: locator.value };
+    case 'attribute':
+      return { ...base, attrName: locator.name, value: locator.value };
     default:
       return { ...base, value: locator.value, exact: locator.exact };
   }
@@ -271,6 +276,10 @@ function locatorFromForm(l: LocatorForm): Locator {
       return { kind: 'testId', value: l.value };
     case 'css':
       return { kind: 'css', value: l.value };
+    case 'id':
+      return { kind: 'id', value: l.value };
+    case 'attribute':
+      return { kind: 'attribute', name: l.attrName.trim(), value: l.value };
     default:
       return { kind: l.kind, value: l.value, exact: l.exact };
   }
@@ -445,7 +454,10 @@ export function issueKey(path: (string | number)[]): string {
 /** One-line, human readable description of a step for collapsed cards. */
 export function stepSummary(step: StepForm): string {
   const sm = t.steps.summary;
-  const element = () => sm.element(t.steps.summaryLocator[step.locator.kind], step.locator.value.trim());
+  const element = () =>
+    step.locator.kind === 'attribute'
+      ? sm.element(`[${step.locator.attrName}]`, step.locator.value.trim())
+      : sm.element(t.steps.summaryLocator[step.locator.kind], step.locator.value.trim());
   switch (step.type) {
     case 'navigate':
       return sm.navigate(step.url || '/');

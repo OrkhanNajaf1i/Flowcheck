@@ -15,9 +15,23 @@ export function toPlaywrightLocator(page: Page, locator: Locator): PwLocator {
       return page.getByPlaceholder(locator.value, { exact: locator.exact });
     case 'text':
       return page.getByText(locator.value, { exact: locator.exact });
+    case 'altText':
+      return page.getByAltText(locator.value, { exact: locator.exact });
+    case 'title':
+      return page.getByTitle(locator.value, { exact: locator.exact });
+    case 'id':
+      return page.locator(`[id=${cssString(locator.value)}]`);
+    case 'attribute':
+      // The name is validated by the schema; the value is a quoted, escaped CSS string.
+      return page.locator(`[${locator.name}=${cssString(locator.value)}]`);
     case 'css':
       return page.locator(locator.value);
   }
+}
+
+/** Quotes a value for a CSS attribute selector so it is always matched literally. */
+export function cssString(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 const POLL_INTERVAL_MS = 100;

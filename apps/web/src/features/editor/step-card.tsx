@@ -1,5 +1,13 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
-import { ARIA_ROLES, COMMON_KEYS, HTTP_METHODS, JSON_VALUE_TYPES, MUTATING_HTTP_METHODS, type StepType } from '@flowcheck/shared';
+import {
+  ARIA_ROLES,
+  COMMON_KEYS,
+  HTTP_METHODS,
+  JSON_VALUE_TYPES,
+  looksGeneratedId,
+  MUTATING_HTTP_METHODS,
+  type StepType,
+} from '@flowcheck/shared';
 import {
   AlertTriangle,
   ChevronDown,
@@ -285,6 +293,7 @@ type Prefix = `${Phase}.${number}`;
 function LocatorFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => string | undefined }) {
   const { register } = useFormContext<EditorForm>();
   const kind = useWatch<EditorForm, `${Phase}.${number}.locator.kind`>({ name: `${prefix}.locator.kind` });
+  const idValue = useWatch<EditorForm, `${Phase}.${number}.locator.value`>({ name: `${prefix}.locator.value` });
   const valueError = err('locator.value') ?? err('locator.name');
 
   return (
@@ -299,7 +308,21 @@ function LocatorFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => 
             ))}
           </Select>
         </Field>
-        {kind === 'role' ? (
+        {kind === 'attribute' ? (
+          <div className="grid grid-cols-[150px_1fr] gap-3">
+            <Field label={t.steps.attrName} htmlFor={`${prefix}-an`} error={err('locator.name')}>
+              <Input
+                id={`${prefix}-an`}
+                aria-invalid={!!err('locator.name')}
+                placeholder="name"
+                {...register(`${prefix}.locator.attrName`)}
+              />
+            </Field>
+            <Field label={t.steps.attrValue} htmlFor={`${prefix}-lv`} error={valueError}>
+              <Input id={`${prefix}-lv`} aria-invalid={!!valueError} placeholder="email" {...register(`${prefix}.locator.value`)} />
+            </Field>
+          </div>
+        ) : kind === 'role' ? (
           <div className="grid grid-cols-[130px_1fr] gap-3">
             <Field label={t.steps.role} htmlFor={`${prefix}-role`}>
               <Select id={`${prefix}-role`} {...register(`${prefix}.locator.role`)}>
@@ -330,7 +353,8 @@ function LocatorFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => 
           </Field>
         )}
       </div>
-      {kind === 'label' || kind === 'placeholder' || kind === 'text' ? (
+      {kind === 'id' && looksGeneratedId(idValue ?? '') ? <p className="text-xs text-warning">⚠ {t.steps.generatedId}</p> : null}
+      {kind === 'label' || kind === 'placeholder' || kind === 'text' || kind === 'altText' || kind === 'title' ? (
         <label className="flex items-center gap-2 text-xs">
           <input type="checkbox" {...register(`${prefix}.locator.exact`)} /> {t.steps.exact}
         </label>
