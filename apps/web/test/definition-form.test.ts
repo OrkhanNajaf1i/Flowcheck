@@ -9,7 +9,14 @@ const definition: TestDefinition = {
   setupSteps: [],
   steps: [
     { id: 'open', name: 'Open', type: 'navigate', url: '/' },
-    { id: 'click', name: 'Buy', type: 'click', locator: { kind: 'role', role: 'button', name: 'Buy now' }, timeoutMs: 5000 },
+    {
+      id: 'click',
+      name: 'Buy',
+      type: 'click',
+      locator: { kind: 'role', role: 'button', name: 'Buy now' },
+      timeoutMs: 5000,
+      screenshot: true,
+    },
     { id: 'fill', name: 'Email', type: 'fill', locator: { kind: 'label', value: 'Email', exact: true }, value: 'qa@example.test' },
     {
       id: 'api',

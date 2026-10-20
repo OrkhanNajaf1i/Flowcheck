@@ -49,6 +49,15 @@ const stepBase = {
   timeoutMs: stepTimeout.optional(),
 };
 
+/**
+ * Steps that work on the page. A screenshot is always taken when one fails; `screenshot: true`
+ * also keeps one after it passes, as visual evidence (it is not a check by itself).
+ */
+const uiStepBase = {
+  ...stepBase,
+  screenshot: z.boolean().optional(),
+};
+
 export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
 
 /** Methods that are never retried and that the editor marks as state-changing. */
@@ -138,7 +147,7 @@ export type NetworkCheck = z.infer<typeof networkCheckSchema>;
 const networkChecks = z.array(networkCheckSchema).max(5).optional();
 
 export const navigateStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('navigate'),
   /** Path starting with "/" (resolved against frontendBaseUrl) or an absolute http(s) URL. */
   url: template(),
@@ -146,14 +155,14 @@ export const navigateStepSchema = z.strictObject({
 });
 
 export const clickStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('click'),
   locator: locatorSchema,
   networkChecks,
 });
 
 export const fillStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('fill'),
   locator: locatorSchema,
   value: template(),
@@ -161,7 +170,7 @@ export const fillStepSchema = z.strictObject({
 });
 
 export const assertVisibleStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertVisible'),
   locator: locatorSchema,
 });
@@ -170,7 +179,7 @@ export const TEXT_MATCH_MODES = ['exact', 'contains'] as const;
 
 /** The element's visible text equals / contains the expected text. Missing element ≠ empty text. */
 export const assertTextStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertText'),
   locator: locatorSchema,
   expected: template(),
@@ -184,21 +193,21 @@ export const assertTextStepSchema = z.strictObject({
  * step fails if at least one match is visible. Several matches are evaluated, never first().
  */
 export const assertHiddenStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertHidden'),
   locator: locatorSchema,
 });
 
 /** The input / textarea / select value equals the expected text exactly. */
 export const assertValueStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertValue'),
   locator: locatorSchema,
   expected: template(),
 });
 
 export const assertEnabledStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertEnabled'),
   locator: locatorSchema,
 });
@@ -208,7 +217,7 @@ export const URL_QUERY_MODES = ['ignore', 'include'] as const;
 
 /** Default: pathname only, query ignored. Hash is never compared. */
 export const assertUrlStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertUrl'),
   expected: template(),
   match: z.enum(URL_MATCH_MODES),
@@ -218,19 +227,19 @@ export const assertUrlStepSchema = z.strictObject({
 export const OPTION_SELECTORS = ['label', 'value'] as const;
 
 export const selectOptionStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('selectOption'),
   locator: locatorSchema,
   option: z.strictObject({ by: z.enum(OPTION_SELECTORS), value: template(500) }),
   networkChecks,
 });
 
-export const checkStepSchema = z.strictObject({ ...stepBase, type: z.literal('check'), locator: locatorSchema, networkChecks });
-export const uncheckStepSchema = z.strictObject({ ...stepBase, type: z.literal('uncheck'), locator: locatorSchema, networkChecks });
+export const checkStepSchema = z.strictObject({ ...uiStepBase, type: z.literal('check'), locator: locatorSchema, networkChecks });
+export const uncheckStepSchema = z.strictObject({ ...uiStepBase, type: z.literal('uncheck'), locator: locatorSchema, networkChecks });
 
 /** Presses a key combination on an element (focused first) or, without a locator, on the page. */
 export const pressStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('press'),
   locator: locatorSchema.optional(),
   key: z

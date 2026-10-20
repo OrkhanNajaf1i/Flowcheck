@@ -288,6 +288,15 @@ export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOp
                 <Input id={`${prefix}-timeout`} inputMode="numeric" {...register(`${prefix}.timeoutMs`)} />
               </Field>
             </div>
+            {step.type !== 'apiRequest' ? (
+              <label className="mt-3 flex items-start gap-2 text-xs">
+                <input type="checkbox" className="mt-0.5" {...register(`${prefix}.screenshot`)} />
+                <span>
+                  {t.steps.screenshotAfter}
+                  <span className="block text-muted-foreground">{t.steps.screenshotAfterHint}</span>
+                </span>
+              </label>
+            ) : null}
           </details>
 
           {stepIssues.length > 0 ? (

@@ -22,6 +22,13 @@ function issues(input: unknown): string[] {
 }
 
 describe('parseDefinition', () => {
+  it('allows a screenshot after a passed step only on page steps', () => {
+    const click = { id: 'c', name: 'Click', type: 'click', locator: { kind: 'testId', value: 'x' }, screenshot: true };
+    const apiStep = { id: 'a', name: 'API', type: 'apiRequest', method: 'GET', path: '/', assertions: [], screenshot: true };
+    expect(issues({ ...base, steps: [navigate, click] })).toEqual([]);
+    expect(issues({ ...base, steps: [apiStep] }).join()).toMatch(/screenshot/);
+  });
+
   it('accepts a minimal valid definition', () => {
     expect(issues({ ...base, steps: [navigate] })).toEqual([]);
   });

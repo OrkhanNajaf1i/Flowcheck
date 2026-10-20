@@ -222,6 +222,9 @@ export const en = {
     value: 'Text to type',
     timeout: 'Timeout (ms)',
     timeoutHint: 'Empty = default',
+    screenshotAfter: 'Take a screenshot after this step passes',
+    screenshotAfterHint:
+      'Visual evidence only. To prove that something appeared (e.g. a dialog), add a "Check it is shown" step. Screenshots are not redacted.',
     locator: 'Element',
     locatorKind: 'Find the element by',
     locatorKinds: {
@@ -506,6 +509,7 @@ export const en = {
     error: 'Error',
     skipped: 'Skipped',
     screenshot: 'Screenshot',
+    screenshotAfterPass: 'Screenshot after the step',
     screenshotNote: 'Screenshots are not redacted and may contain personal data.',
     blocked: 'Blocked requests',
     blockedCount: (n: number) => `${n} blocked`,

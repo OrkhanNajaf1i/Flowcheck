@@ -158,9 +158,12 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
       });
       // Outputs are published only now that the whole step (incl. network checks) has passed.
       for (const [name, value] of Object.entries(execution.outputs ?? {})) scope.set('outputs', name, value);
+      // Optional visual evidence of a passed step (requested per step; never a check by itself).
+      const screenshot = 'screenshot' in ref.step && ref.step.screenshot === true ? await captureScreenshot(page) : null;
       // Blocked requests are shown on passing steps too, so a missing CDN origin is visible.
       return {
         ...done('passed', startedAt),
+        screenshot,
         expected: redactJson(execution.expected, scope.secretValues()),
         actual: redactJson(withBlocked(execution.actual, blocked, startedAt.getTime()), scope.secretValues()),
       };

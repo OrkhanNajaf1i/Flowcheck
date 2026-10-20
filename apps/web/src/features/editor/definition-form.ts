@@ -91,6 +91,8 @@ export interface StepForm {
   keyCombo: string;
   /** press: focus an element first (true) or press on the page (false). */
   pressOnElement: boolean;
+  /** Keep a screenshot after the step passes (page steps only). */
+  screenshot: boolean;
   /** Requests the action must send (action steps only). */
   networkChecks: NetworkCheckForm[];
   /** Values taken from the API response (apiRequest only). */
@@ -195,6 +197,7 @@ export function blankStep(type: StepType = 'navigate', name = ''): StepForm {
     optionBy: 'label',
     keyCombo: 'Enter',
     pressOnElement: true,
+    screenshot: false,
     networkChecks: [],
     outputs: [],
   };
@@ -288,6 +291,7 @@ function stepToFormBase(step: Step): StepForm {
     id: step.id,
     name: step.name,
     timeoutMs: step.timeoutMs?.toString() ?? '',
+    screenshot: 'screenshot' in step && step.screenshot === true,
     assertions: [] as AssertionForm[],
   };
   switch (step.type) {
@@ -484,7 +488,8 @@ function networkCheckFromForm(n: NetworkCheckForm, path: (string | number)[], c:
 }
 
 function stepFromForm(s: StepForm, path: (string | number)[], c: Collector): Step {
-  const step = stepFromFormBase(s, path, c);
+  const base = stepFromFormBase(s, path, c);
+  const step = s.screenshot && base.type !== 'apiRequest' ? ({ ...base, screenshot: true } as Step) : base;
   if (step.type === 'apiRequest' && s.outputs.length > 0) return { ...step, outputs: s.outputs.map(outputFromForm) };
   if ((NETWORK_CHECK_STEP_TYPES as readonly string[]).includes(step.type) && s.networkChecks.length > 0) {
     const networkChecks = s.networkChecks.map((n, i) => networkCheckFromForm(n, [...path, 'networkChecks', i], c));

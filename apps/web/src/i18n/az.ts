@@ -223,6 +223,9 @@ export const az: Dict = {
     value: 'Yazılacaq mətn',
     timeout: 'Vaxt limiti (ms)',
     timeoutHint: 'Boş = standart',
+    screenshotAfter: 'Addım keçəndən sonra ekran görüntüsü çək',
+    screenshotAfterHint:
+      'Yalnız vizual sübutdur. Nəyinsə (məs. modalın) göründüyünü sübut etmək üçün "Göründüyünü yoxla" addımı əlavə edin. Ekran görüntüləri gizlədilmir.',
     locator: 'Element',
     locatorKind: 'Elementi necə tapaq',
     locatorKinds: {
@@ -506,6 +509,7 @@ export const az: Dict = {
     error: 'Xəta',
     skipped: 'Ötürüldü',
     screenshot: 'Ekran görüntüsü',
+    screenshotAfterPass: 'Addımdan sonrakı ekran görüntüsü',
     screenshotNote: 'Ekran görüntüləri gizlədilmir və şəxsi məlumat göstərə bilər.',
     blocked: 'Bloklanmış sorğular',
     blockedCount: (n: number) => `${n} bloklanıb`,

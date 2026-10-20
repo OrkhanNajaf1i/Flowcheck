@@ -181,7 +181,7 @@ function StepRow({ runId, step }: { runId: string; step: StepRunDto }) {
             .map((artifact) => (
               <figure key={artifact.id} className="flex flex-col gap-1">
                 <figcaption className="text-xs text-muted-foreground">
-                  {t.run.screenshot} · {t.run.screenshotNote}
+                  {step.status === 'passed' ? t.run.screenshotAfterPass : t.run.screenshot} · {t.run.screenshotNote}
                 </figcaption>
                 <a href={api.artifactUrl(runId, artifact.id)} target="_blank" rel="noreferrer">
                   <img
