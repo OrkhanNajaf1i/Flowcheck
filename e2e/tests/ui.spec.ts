@@ -251,3 +251,33 @@ test('a step can search only inside another element', async ({ page }) => {
   await page.getByRole('button', { name: 'Start run' }).click();
   await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
 });
+
+test('pasting element HTML suggests stable locators and fills the step', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(projectId, definition([{ id: 'open', name: 'Open form', type: 'navigate', url: '/form' }]));
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await addStep(page, /^Click/);
+  const step = page.getByTestId('step-steps-1');
+
+  await step.getByRole('button', { name: 'Suggest from HTML' }).first().click();
+  const dialog = page.getByRole('dialog');
+  // As copied from DevTools: icon-only button with an auto-generated id and utility classes.
+  await dialog
+    .getByLabel('Element HTML')
+    .fill(
+      '<button type="button" id="reka-dropdown-menu-trigger-v-31" class="inline-flex items-center size-8" aria-label="Account" title="Your account"><svg></svg></button>',
+    );
+  const suggestions = dialog.getByRole('list', { name: 'Suggestions' }).getByRole('listitem');
+  await expect(suggestions.first()).toContainText('Most reliable');
+  await expect(suggestions.first()).toContainText('role button named "Account"');
+  await expect(suggestions.last()).toContainText('May change');
+  await suggestions.first().getByRole('button', { name: 'Use' }).click();
+
+  await expect(step.getByLabel('Find the element by')).toHaveValue('role');
+  await expect(step.getByLabel('Exact name (text on it)')).toHaveValue('Account');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});

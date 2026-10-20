@@ -1,6 +1,7 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
 import {
   ARIA_ROLES,
+  type BaseLocator,
   COMMON_KEYS,
   HTTP_METHODS,
   JSON_VALUE_TYPES,
@@ -45,6 +46,7 @@ import {
   type StepForm,
   stepSummary,
 } from './definition-form';
+import { SuggestFromHtmlDialog } from './suggest-dialog';
 
 /** Step types grouped the way the picker shows them. */
 export const STEP_GROUPS: { id: 'actions' | 'checks' | 'api'; types: StepType[] }[] = [
@@ -338,8 +340,17 @@ function LocatorFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => 
 
 /** "Find the element by" + its value fields; used for the element and for its container. */
 function LocatorKindFields({ path, idBase, err }: { path: LocatorPath; idBase: string; err: (sub: string) => string | undefined }) {
-  const { register } = useFormContext<EditorForm>();
+  const { register, setValue } = useFormContext<EditorForm>();
   const reg = (field: string) => register(`${path}.${field}` as Path<EditorForm>);
+  const fill = (locator: BaseLocator) => {
+    const set = (field: string, value: unknown) =>
+      setValue(`${path}.${field}` as Path<EditorForm>, value as never, { shouldDirty: true, shouldValidate: false });
+    set('kind', locator.kind);
+    set('value', locator.kind === 'role' ? locator.name : locator.value);
+    if (locator.kind === 'role') set('role', locator.role);
+    if (locator.kind === 'attribute') set('attrName', locator.name);
+    if ('exact' in locator) set('exact', locator.exact);
+  };
   const kind = useWatch({ name: `${path}.kind` as Path<EditorForm> }) as LocatorKind;
   const value = useWatch({ name: `${path}.value` as Path<EditorForm> }) as string | undefined;
   const valueError = err('value') ?? err('name');
@@ -399,6 +410,7 @@ function LocatorKindFields({ path, idBase, err }: { path: LocatorPath; idBase: s
         </label>
       ) : null}
       {kind === 'css' ? <p className="text-xs text-warning">⚠ {t.steps.fragile}</p> : null}
+      <SuggestFromHtmlDialog onPick={fill} />
     </>
   );
 }

@@ -81,6 +81,10 @@ ID, other attribute (name + exact value), image alt text and title locators, plu
 
 Optional "search only inside another element" (`locator.within`, one level). Evidence: shared (1 new), web round-trip (extended), e2e steps.spec (scoped vs. unscoped, ambiguous container, missing container) and UI test (1).
 
+## Suggest locators from HTML — done
+
+Paste an element's HTML (DevTools → Copy element) and pick from locators ranked by stability, for the element and for its container. Evidence: web unit tests (7, incl. scripts/event handlers not executed) and a UI e2e test that pastes an icon button with a generated id, picks the suggestion and runs the test.
+
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.
