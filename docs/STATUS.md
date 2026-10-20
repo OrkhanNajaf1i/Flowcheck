@@ -85,13 +85,19 @@ Optional "search only inside another element" (`locator.within`, one level). Evi
 
 Paste an element's HTML (DevTools → Copy element) and pick from locators ranked by stability, for the element and for its container. Evidence: web unit tests (7, incl. scripts/event handlers not executed) and a UI e2e test that pastes an icon button with a generated id, picks the suggestion and runs the test.
 
+## Phase 3 (part 1): network checks and outputs — done
+
+Request checks on action steps (listener attached before the action, matching by origin/method/exact path/selected query, 500 ms duplicate window, never re-sent), output variables from network checks and API steps, use of outputs in later steps and cleanup, editor UI for both, hints for NETWORK_TIMEOUT / AMBIGUOUS_NETWORK_MATCH.
+
+Acceptance criteria now covered end-to-end (`e2e/tests/network.spec.ts`, repeated 3× without flakiness): 6 (fast POST /orders not missed), 7 (orderId from 201), 8 (later API step uses it), 9 (GET proves existence), 10, 11 (500 reported as status failure, not "no response"), 12 (UI success but no order), 13 (cart not cleared), 21 (cleanup does not erase the main failure; cleanup with a missing output is skipped with a visible reason).
+
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.
-- **Phase 3:** network checks on UI actions, output variables, setup/cleanup acceptance flow with demo order deletion, secrets (encryption, redaction in runs), auth profiles.
+- **Phase 3 (rest):** secrets (encryption at rest, redaction in runs), auth profiles.
 - **Phase 4:** recorder.
 - **Phase 5:** bootstrap token, artifact retention/quota, remaining acceptance criteria (1, 2, 4–9, 12, 13, 17, 21, 24, 29, 31) and e2e for real process restart and redirect bypass.
 
 ## Next concrete task
 
-Phase 3: network checks on UI actions (with output variables such as orderId), then secrets and auth profiles.
+Secrets: encrypted storage with the master key, `{{secrets.name}}` in fill values and headers, redaction everywhere, run refuses to start when a required secret is missing.

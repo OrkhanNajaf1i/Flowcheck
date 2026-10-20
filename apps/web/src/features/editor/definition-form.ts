@@ -12,7 +12,15 @@ import type {
   TestDefinition,
   ValidationIssue,
 } from '@flowcheck/shared';
-import { CURRENT_SCHEMA_VERSION, parseDefinition, zodIssuesToValidationIssues } from '@flowcheck/shared';
+import {
+  CURRENT_SCHEMA_VERSION,
+  NETWORK_CHECK_STEP_TYPES,
+  type NetworkCheck,
+  type OutputMapping,
+  parseDefinition,
+  stepNetworkChecks,
+  zodIssuesToValidationIssues,
+} from '@flowcheck/shared';
 import { t } from '@/i18n';
 
 /**
@@ -83,6 +91,52 @@ export interface StepForm {
   keyCombo: string;
   /** press: focus an element first (true) or press on the page (false). */
   pressOnElement: boolean;
+  /** Requests the action must send (action steps only). */
+  networkChecks: NetworkCheckForm[];
+  /** Values taken from the API response (apiRequest only). */
+  outputs: OutputForm[];
+}
+
+export interface OutputForm {
+  name: string;
+  from: 'json' | 'header';
+  pointer: string;
+  header: string;
+}
+
+export interface NetworkCheckForm {
+  key: string;
+  id: string;
+  name: string;
+  originMode: 'api' | 'frontend' | 'custom';
+  origin: string;
+  method: (typeof HTTP_METHODS)[number];
+  pathname: string;
+  /** Selected query parameters as "a=1&b=2". */
+  query: string;
+  timeoutMs: string;
+  assertions: AssertionForm[];
+  outputs: OutputForm[];
+}
+
+export function blankOutput(): OutputForm {
+  return { name: '', from: 'json', pointer: '/id', header: '' };
+}
+
+export function blankNetworkCheck(name: string): NetworkCheckForm {
+  return {
+    key: newKey(),
+    id: newStepId(),
+    name,
+    originMode: 'api',
+    origin: '',
+    method: 'POST',
+    pathname: '/',
+    query: '',
+    timeoutMs: '',
+    assertions: [blankAssertion()],
+    outputs: [],
+  };
 }
 
 export interface InputForm {
@@ -139,6 +193,8 @@ export function blankStep(type: StepType = 'navigate', name = ''): StepForm {
     optionBy: 'label',
     keyCombo: 'Enter',
     pressOnElement: true,
+    networkChecks: [],
+    outputs: [],
   };
 }
 
@@ -194,7 +250,37 @@ function assertionToForm(a: ResponseAssertion): AssertionForm {
   }
 }
 
+function outputToForm(o: OutputMapping): OutputForm {
+  return o.from === 'json'
+    ? { ...blankOutput(), name: o.name, pointer: o.pointer }
+    : { ...blankOutput(), name: o.name, from: 'header', header: o.header, pointer: '' };
+}
+
+function networkCheckToForm(check: NetworkCheck): NetworkCheckForm {
+  const mode = check.match.origin === 'api' || check.match.origin === 'frontend' ? check.match.origin : 'custom';
+  return {
+    ...blankNetworkCheck(check.name),
+    id: check.id,
+    originMode: mode,
+    origin: mode === 'custom' ? check.match.origin : '',
+    method: check.match.method,
+    pathname: check.match.pathname,
+    query: check.match.query ? new URLSearchParams(check.match.query).toString() : '',
+    timeoutMs: check.timeoutMs?.toString() ?? '',
+    assertions: check.assertions.map(assertionToForm),
+    outputs: (check.outputs ?? []).map(outputToForm),
+  };
+}
+
 function stepToForm(step: Step): StepForm {
+  return {
+    ...stepToFormBase(step),
+    networkChecks: stepNetworkChecks(step).map(networkCheckToForm),
+    outputs: step.type === 'apiRequest' ? (step.outputs ?? []).map(outputToForm) : [],
+  };
+}
+
+function stepToFormBase(step: Step): StepForm {
   const form = {
     ...blankStep(step.type),
     id: step.id,
@@ -363,7 +449,43 @@ function assertionFromForm(a: AssertionForm, path: (string | number)[], c: Colle
   }
 }
 
+function outputFromForm(o: OutputForm): OutputMapping {
+  return o.from === 'json'
+    ? { name: o.name.trim(), from: 'json', pointer: o.pointer }
+    : { name: o.name.trim(), from: 'header', header: o.header.trim() };
+}
+
+function networkCheckFromForm(n: NetworkCheckForm, path: (string | number)[], c: Collector): NetworkCheck {
+  const timeoutMs = intOrUndefined(n.timeoutMs, [...path, 'timeoutMs'], c);
+  const query = n.query.trim() ? Object.fromEntries(new URLSearchParams(n.query.trim().replace(/^\?/, ''))) : undefined;
+  return {
+    id: n.id,
+    name: n.name,
+    match: {
+      origin: n.originMode === 'custom' ? n.origin.trim() : n.originMode,
+      method: n.method,
+      pathname: n.pathname.trim(),
+      ...(query && Object.keys(query).length > 0 ? { query } : {}),
+    },
+    ...(timeoutMs === undefined ? {} : { timeoutMs }),
+    assertions: n.assertions
+      .map((a, i) => assertionFromForm(a, [...path, 'assertions', i], c))
+      .filter((a): a is ResponseAssertion => a !== null),
+    ...(n.outputs.length > 0 ? { outputs: n.outputs.map(outputFromForm) } : {}),
+  };
+}
+
 function stepFromForm(s: StepForm, path: (string | number)[], c: Collector): Step {
+  const step = stepFromFormBase(s, path, c);
+  if (step.type === 'apiRequest' && s.outputs.length > 0) return { ...step, outputs: s.outputs.map(outputFromForm) };
+  if ((NETWORK_CHECK_STEP_TYPES as readonly string[]).includes(step.type) && s.networkChecks.length > 0) {
+    const networkChecks = s.networkChecks.map((n, i) => networkCheckFromForm(n, [...path, 'networkChecks', i], c));
+    return { ...step, networkChecks } as Step;
+  }
+  return step;
+}
+
+function stepFromFormBase(s: StepForm, path: (string | number)[], c: Collector): Step {
   const timeoutMs = intOrUndefined(s.timeoutMs, [...path, 'timeoutMs'], c);
   const base = { id: s.id, name: s.name, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
   switch (s.type) {

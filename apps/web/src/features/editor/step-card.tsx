@@ -4,9 +4,9 @@ import {
   type BaseLocator,
   COMMON_KEYS,
   HTTP_METHODS,
-  JSON_VALUE_TYPES,
   looksGeneratedId,
   MUTATING_HTTP_METHODS,
+  NETWORK_CHECK_STEP_TYPES,
   type StepType,
 } from '@flowcheck/shared';
 import {
@@ -37,15 +37,8 @@ import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { t } from '@/i18n';
-import {
-  type AssertionKind,
-  blankAssertion,
-  type EditorForm,
-  type LocatorKind,
-  type Phase,
-  type StepForm,
-  stepSummary,
-} from './definition-form';
+import { blankAssertion, type EditorForm, type LocatorKind, type Phase, type StepForm, stepSummary } from './definition-form';
+import { AssertionsEditor, NetworkChecksSection, OutputsEditor } from './response-editors';
 import { SuggestFromHtmlDialog } from './suggest-dialog';
 
 /** Step types grouped the way the picker shows them. */
@@ -84,7 +77,6 @@ const LOCATOR_STEPS: ReadonlySet<StepType> = new Set([
   'assertValue',
   'assertEnabled',
 ]);
-const ASSERTION_KINDS = Object.keys(t.steps.assertionKinds) as AssertionKind[];
 
 export interface StepCardProps {
   phase: Phase;
@@ -274,6 +266,8 @@ export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOp
 
           {step.type === 'apiRequest' ? <ApiFields prefix={prefix} err={err} /> : null}
 
+          {(NETWORK_CHECK_STEP_TYPES as readonly string[]).includes(step.type) ? <NetworkChecksSection prefix={prefix} err={err} /> : null}
+
           <details className="text-sm">
             <summary className="cursor-pointer text-xs text-muted-foreground">{t.common.advanced}</summary>
             <div className="mt-2 max-w-60">
@@ -418,10 +412,7 @@ function LocatorKindFields({ path, idBase, err }: { path: LocatorPath; idBase: s
 function ApiFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => string | undefined }) {
   const { register, control } = useFormContext<EditorForm>();
   const headers = useFieldArray({ control, name: `${prefix}.headers` });
-  const assertions = useFieldArray({ control, name: `${prefix}.assertions` });
   const method = useWatch<EditorForm, `${Phase}.${number}.method`>({ name: `${prefix}.method` });
-  const kinds = useWatch<EditorForm, `${Phase}.${number}.assertions`>({ name: `${prefix}.assertions` }) ?? [];
-  const hasStatus = kinds.some((a) => a.kind === 'statusEquals' || a.kind === 'statusIn');
 
   return (
     <div className="flex flex-col gap-3">
@@ -454,68 +445,8 @@ function ApiFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => stri
         <p className="text-xs text-muted-foreground">{t.steps.mutatingNote}</p>
       ) : null}
 
-      <div className="flex flex-col gap-2 rounded-md bg-muted/60 p-3">
-        <span className="text-xs font-medium text-muted-foreground">{t.steps.assertions}</span>
-        {!hasStatus ? <p className="text-xs text-warning">⚠ {t.steps.noStatusWarning}</p> : null}
-        {assertions.fields.map((field, i) => {
-          const kind = kinds[i]?.kind ?? 'statusEquals';
-          const needsPointer = kind.startsWith('json');
-          const needsName = kind === 'headerEquals' || kind === 'headerContains';
-          const needsExpected = kind !== 'jsonExists';
-          const expectedError = err(`assertions.${i}.expected`);
-          return (
-            <div key={field.id} className="grid items-start gap-2 md:grid-cols-[190px_1fr_1fr_auto]">
-              <Select aria-label={t.steps.check} {...register(`${prefix}.assertions.${i}.kind`)}>
-                {ASSERTION_KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {t.steps.assertionKinds[k]}
-                  </option>
-                ))}
-              </Select>
-              {needsPointer ? (
-                <Field label={t.steps.pointer} error={err(`assertions.${i}.pointer`)} hint={t.steps.pointerHint}>
-                  <Input placeholder="/id" {...register(`${prefix}.assertions.${i}.pointer`)} />
-                </Field>
-              ) : needsName ? (
-                <Field label={t.steps.headerName} error={err(`assertions.${i}.name`)}>
-                  <Input placeholder="content-type" {...register(`${prefix}.assertions.${i}.name`)} />
-                </Field>
-              ) : (
-                <div />
-              )}
-              {needsExpected ? (
-                kind === 'jsonType' ? (
-                  <Field label={t.steps.expected}>
-                    <Select {...register(`${prefix}.assertions.${i}.expected`)}>
-                      {JSON_VALUE_TYPES.map((jt) => (
-                        <option key={jt} value={jt}>
-                          {jt}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                ) : (
-                  <Field
-                    label={kind === 'statusIn' ? t.steps.statusList : t.steps.expected}
-                    error={expectedError}
-                    hint={kind === 'jsonEquals' ? t.steps.expectedJsonHint : undefined}
-                  >
-                    <Input aria-invalid={!!expectedError} {...register(`${prefix}.assertions.${i}.expected`)} />
-                  </Field>
-                )
-              ) : (
-                <div />
-              )}
-              <Button variant="ghost" size="icon" aria-label={t.common.delete} onClick={() => assertions.remove(i)}>
-                <Trash2 />
-              </Button>
-            </div>
-          );
-        })}
-        <Button variant="outline" size="sm" className="self-start" onClick={() => assertions.append(blankAssertion('statusEquals'))}>
-          <Plus /> {t.steps.addAssertion}
-        </Button>
-      </div>
+      <AssertionsEditor path={`${prefix}.assertions`} err={(sub) => err(`assertions.${sub}`)} />
+      <OutputsEditor path={`${prefix}.outputs`} err={(sub) => err(`outputs.${sub}`)} />
 
       <details className="text-sm" open={headers.fields.length > 0 || (method !== 'GET' && method !== 'HEAD')}>
         <summary className="cursor-pointer text-xs text-muted-foreground">

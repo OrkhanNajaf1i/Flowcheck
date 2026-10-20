@@ -281,3 +281,43 @@ test('pasting element HTML suggests stable locators and fills the step', async (
   await page.getByRole('button', { name: 'Start run' }).click();
   await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
 });
+
+test('a request check on a click keeps the order id for a later API step', async ({ page }) => {
+  await setDemoMode('success');
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(
+    projectId,
+    definition([
+      { id: 'open', name: 'Open shop', type: 'navigate', url: '/' },
+      { id: 'add', name: 'Add mug', type: 'click', locator: { kind: 'testId', value: 'add-to-cart-p-1' } },
+      { id: 'added', name: 'Added', type: 'assertVisible', locator: { kind: 'text', value: 'Blue Mug added to cart', exact: true } },
+      { id: 'cart', name: 'Open cart', type: 'navigate', url: '/cart' },
+      { id: 'place', name: 'Place order', type: 'click', locator: { kind: 'testId', value: 'place-order' } },
+    ]),
+  );
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+
+  const place = page.getByTestId('step-steps-4');
+  await place
+    .getByRole('button', { name: /Place order/ })
+    .first()
+    .click();
+  await place.getByText('Check the request this action sends').click();
+  await place.getByRole('button', { name: 'Add request check' }).click();
+  const check = place.getByTestId('network-check-0');
+  await check.getByLabel('Path').fill('/api/orders');
+  await check.getByLabel('Expected').fill('201');
+  await check.getByRole('button', { name: 'Keep a value' }).click();
+  await check.getByLabel('Variable name').fill('orderId');
+  await expect(check.getByText('Use it in later steps as {{outputs.orderId}}')).toBeVisible();
+
+  await addStep(page, /^API request/);
+  const read = page.getByTestId('step-steps-5');
+  await read.getByLabel('Path').fill('/orders/{{outputs.orderId}}');
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});

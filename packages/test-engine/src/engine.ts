@@ -152,6 +152,8 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
         blocked,
         deadline: Date.now() + timeoutMs,
       });
+      // Outputs are published only now that the whole step (incl. network checks) has passed.
+      for (const [name, value] of Object.entries(execution.outputs ?? {})) scope.set('outputs', name, value);
       // Blocked requests are shown on passing steps too, so a missing CDN origin is visible.
       return {
         ...done('passed', startedAt),

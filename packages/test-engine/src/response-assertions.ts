@@ -21,11 +21,11 @@ export interface AssertionResult {
   message: string;
 }
 
-type JsonBody = { ok: true; value: unknown } | { ok: false; code: ErrorCode; message: string };
+export type JsonBody = { ok: true; value: unknown } | { ok: false; code: ErrorCode; message: string };
 
 const JSON_CONTENT_TYPE = /^application\/(json|[\w.+-]*\+json)\s*(;|$)/i;
 
-function parseJsonBody(response: ObservedResponse): JsonBody {
+export function parseJsonBody(response: ObservedResponse): JsonBody {
   const contentType = response.headers['content-type'];
   if (contentType === undefined || !JSON_CONTENT_TYPE.test(contentType)) {
     return {

@@ -33,6 +33,8 @@ export class StepError extends Error {
 export interface StepExecution {
   expected: unknown;
   actual: unknown;
+  /** Values to publish as {{outputs.*}} — only applied when the step passed. */
+  outputs?: Record<string, string | number | boolean | null>;
 }
 
 /** Thrown by a step that ran but did not meet expectations; carries its evidence. */

@@ -29,6 +29,8 @@
     <button type="submit" id="submit" disabled>Sign up</button>
   </form>
   <section id="footer-tools"><button type="button" data-testid="footer-search">Search</button></section>
+  <!-- Sends the same request twice (duplicate-request detection test). -->
+  <button type="button" data-testid="refresh-twice" onclick="fetch('/api/products');fetch('/api/products')">Refresh twice</button>
   <script type="module">
     const form = document.getElementById('signup');
     const terms = document.getElementById('terms');
