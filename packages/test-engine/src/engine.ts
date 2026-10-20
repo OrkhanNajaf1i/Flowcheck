@@ -10,6 +10,7 @@ import {
 } from '@flowcheck/shared';
 import type { BrowserContext, Page } from 'playwright';
 import { StepError } from './errors.ts';
+import { redactJson, redactText } from './redact.ts';
 import { effectiveStepTimeout, type StepOutcome } from './status.ts';
 import { executeStep, expectedOf, firstLine, StepFailure, UI_STEP_TYPES } from './steps.ts';
 import { installTargetGuard } from './target-guard.ts';
@@ -48,6 +49,8 @@ export interface RunDefinitionOptions {
   definition: TestDefinition;
   environment: EnvironmentSnapshot;
   inputs: Record<string, InputValue>;
+  /** Decrypted values of the secrets the definition refers to; redacted from all evidence. */
+  secrets?: Record<string, string>;
   run: { id: string; startedAt: string; suffix: string };
   reporter: EngineReporter;
   /** Aborted by the runner; `signal.reason` is an AbortReason. */
@@ -80,6 +83,7 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
   scope.set('run', 'id', options.run.id);
   scope.set('run', 'startedAt', options.run.startedAt);
   scope.set('run', 'suffix', options.run.suffix);
+  for (const [name, value] of Object.entries(options.secrets ?? {})) scope.set('secrets', name, value);
 
   const blocked = await installTargetGuard(context, policy);
   let browserCrashed = false;
@@ -157,8 +161,8 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
       // Blocked requests are shown on passing steps too, so a missing CDN origin is visible.
       return {
         ...done('passed', startedAt),
-        expected: execution.expected,
-        actual: withBlocked(execution.actual, blocked, startedAt.getTime()),
+        expected: redactJson(execution.expected, scope.secretValues()),
+        actual: redactJson(withBlocked(execution.actual, blocked, startedAt.getTime()), scope.secretValues()),
       };
     } catch (error) {
       const abort = abortReason();
@@ -180,10 +184,11 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
           : { expected: expectedOf(ref.step), actual: Object.keys(stepError.details).length > 0 ? stepError.details : null };
       return {
         ...done(stepError.kind, startedAt),
-        expected: execution.expected,
-        actual: withBlocked(execution.actual, blocked, startedAt.getTime()),
+        expected: redactJson(execution.expected, scope.secretValues()),
+        actual: redactJson(withBlocked(execution.actual, blocked, startedAt.getTime()), scope.secretValues()),
         errorCode: stepError.code,
-        errorMessage: stepError.message,
+        // Error texts can echo what was typed; never let a secret value through.
+        errorMessage: redactText(stepError.message, scope.secretValues()),
         screenshot,
       };
     }

@@ -1,4 +1,13 @@
-import type { ArtifactRow, EnvironmentRow, ProjectRow, RevisionRow, RunRow, StepRunRow, TestCaseWithLastRun } from '@flowcheck/db';
+import type {
+  ArtifactRow,
+  EnvironmentRow,
+  ProjectRow,
+  RevisionRow,
+  RunRow,
+  SecretInfo,
+  StepRunRow,
+  TestCaseWithLastRun,
+} from '@flowcheck/db';
 import {
   type ArtifactDto,
   type EnvironmentDto,
@@ -7,12 +16,17 @@ import {
   type ProjectDto,
   type RevisionDto,
   type RunDto,
+  type SecretDto,
   type StepRunDto,
   type TestCaseDto,
 } from '@flowcheck/shared';
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const isoOrNull = (ms: number | null) => (ms === null ? null : iso(ms));
+
+export function secretDto(row: SecretInfo): SecretDto {
+  return { id: row.id, projectId: row.projectId, name: row.name, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) };
+}
 
 export function projectDto(row: ProjectRow): ProjectDto {
   return { id: row.id, name: row.name, description: row.description, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) };

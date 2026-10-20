@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDefinition } from '../src/definition.ts';
+import { parseDefinition, referencedSecrets } from '../src/definition.ts';
 import { ERROR_CODES } from '../src/errors.ts';
 import { looksGeneratedId } from '../src/locator.ts';
 import { parseTemplate } from '../src/templates.ts';
@@ -233,5 +233,41 @@ describe('network checks and outputs', () => {
   it('only allows network checks on action steps', () => {
     const visible = { id: 'v', name: 'v', type: 'assertVisible', locator: { kind: 'testId', value: 'x' }, networkChecks: [] };
     expect(issues({ ...base, steps: [visible] }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('secrets in definitions', () => {
+  const fill = {
+    id: 'pw',
+    name: 'Password',
+    type: 'fill',
+    locator: { kind: 'label', value: 'Password', exact: true },
+    value: '{{secrets.testPassword}}',
+  };
+  const api = (extra: Record<string, unknown>) => ({
+    id: 'a',
+    name: 'a',
+    type: 'apiRequest',
+    method: 'GET',
+    path: '/me',
+    assertions: [],
+    ...extra,
+  });
+
+  it('are allowed in fill values and headers, and listed', () => {
+    const def = { ...base, steps: [fill, api({ headers: { Authorization: 'Bearer {{secrets.apiToken}}' } })] };
+    expect(issues(def)).toEqual([]);
+    const parsed = parseDefinition(def);
+    expect(parsed.ok && referencedSecrets(parsed.definition)).toEqual(['apiToken', 'testPassword']);
+  });
+
+  it('are rejected in paths, URLs and assertions', () => {
+    expect(issues({ ...base, steps: [api({ path: '/users/{{secrets.apiToken}}' })] }).join()).toContain('secrets are not allowed');
+    expect(issues({ ...base, steps: [{ id: 'n', name: 'n', type: 'navigate', url: '/?t={{secrets.apiToken}}' }] }).join()).toContain(
+      'secrets are not allowed',
+    );
+    expect(
+      issues({ ...base, steps: [api({ assertions: [{ kind: 'textContains', expected: '{{secrets.apiToken}}' }] })] }).join(),
+    ).toContain('secrets are not allowed');
   });
 });

@@ -10,12 +10,15 @@ import {
   getTestCase,
   heartbeatRun,
   insertArtifact,
+  loadMasterKey,
   markStepRunning,
   newId,
   newSuffix,
+  RepoError,
   type RunRow,
+  revealSecrets,
 } from '@flowcheck/db';
-import { allSteps, type FailureSummary, type FinalRunStatus, parseDefinition, resolveInputs } from '@flowcheck/shared';
+import { allSteps, type FailureSummary, type FinalRunStatus, parseDefinition, referencedSecrets, resolveInputs } from '@flowcheck/shared';
 import { type AbortReason, computeRunStatus, effectiveRunTimeout, runDefinition } from '@flowcheck/test-engine';
 import type { Logger } from 'pino';
 import { type Browser, type BrowserContext, chromium } from 'playwright';
@@ -65,6 +68,23 @@ async function execute(
   const inputs = resolveInputs(definition, run.inputsSnapshot);
   if (!inputs.ok) {
     return { status: 'error', failureSummary: { code: 'VALIDATION_ERROR', message: inputs.issues.map((i) => i.message).join('; ') } };
+  }
+  // Secrets are decrypted only now, only those the test uses, and never written to the run.
+  const projectIdForSecrets = getTestCase(db, run.testCaseId).projectId;
+  let secrets: Record<string, string>;
+  try {
+    secrets = revealSecrets(db, loadMasterKey(config.dataDir), projectIdForSecrets, referencedSecrets(definition));
+  } catch (error) {
+    if (error instanceof RepoError && error.code === 'SECRET_NOT_FOUND') {
+      return { status: 'error', failureSummary: { code: 'SECRET_NOT_FOUND', message: error.message } };
+    }
+    return {
+      status: 'error',
+      failureSummary: {
+        code: 'INTERNAL_ERROR',
+        message: 'Secrets could not be decrypted (is the master key the same as when they were saved?)',
+      },
+    };
   }
   // The snapshot decides targets; the live environment only decides whether running is allowed.
   if (!getEnvironment(db, run.environmentId).enabled) {
@@ -136,6 +156,7 @@ async function execute(
       definition,
       environment: run.environmentSnapshot,
       inputs: inputs.values,
+      secrets,
       run: { id: run.id, startedAt, suffix: newSuffix() },
       signal: abort.signal,
       reporter: {

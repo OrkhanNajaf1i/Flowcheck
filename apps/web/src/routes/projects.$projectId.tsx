@@ -7,13 +7,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EnvironmentsPanel } from '@/features/environments/environments-panel';
 import { DeleteProjectDialog } from '@/features/projects/delete-project-dialog';
 import { GettingStarted } from '@/features/projects/getting-started';
+import { SecretsPanel } from '@/features/secrets/secrets-panel';
 import { TestsPanel } from '@/features/tests/tests-panel';
 import { t } from '@/i18n';
 import { api } from '@/lib/api';
 
 export const Route = createFileRoute('/projects/$projectId')({ component: ProjectPage });
 
-type Tab = 'tests' | 'environments';
+type Tab = 'tests' | 'environments' | 'secrets';
 
 function ProjectPage() {
   const { projectId } = Route.useParams();
@@ -71,12 +72,16 @@ function ProjectPage() {
           <TabsTrigger value="environments">
             {t.project.environments} ({environments.data.length})
           </TabsTrigger>
+          <TabsTrigger value="secrets">{t.secrets.tab}</TabsTrigger>
         </TabsList>
         <TabsContent value="tests">
           <TestsPanel projectId={projectId} openNewSignal={openNewTest} />
         </TabsContent>
         <TabsContent value="environments">
           <EnvironmentsPanel projectId={projectId} openNewSignal={openNewEnvironment} />
+        </TabsContent>
+        <TabsContent value="secrets">
+          <SecretsPanel projectId={projectId} />
         </TabsContent>
       </Tabs>
     </div>

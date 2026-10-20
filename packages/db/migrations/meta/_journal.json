@@ -15,6 +15,13 @@
       "when": 1792493940387,
       "tag": "0001_immutability_triggers",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792525046315,
+      "tag": "0002_secrets",
+      "breakpoints": true
     }
   ]
 }

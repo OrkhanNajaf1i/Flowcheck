@@ -91,13 +91,17 @@ Request checks on action steps (listener attached before the action, matching by
 
 Acceptance criteria now covered end-to-end (`e2e/tests/network.spec.ts`, repeated 3× without flakiness): 6 (fast POST /orders not missed), 7 (orderId from 201), 8 (later API step uses it), 9 (GET proves existence), 10, 11 (500 reported as status failure, not "no response"), 12 (UI success but no order), 13 (cart not cleared), 21 (cleanup does not erase the main failure; cleanup with a missing output is skipped with a visible reason).
 
+## Phase 3 (part 2): secrets — done
+
+Encrypted secrets per project (API + "Secrets" tab), `{{secrets.name}}` in fill values and headers with a picker in the editor, plain-password warning, runs refuse to start without required secrets, central redaction of all step evidence and error messages. Evidence: db (8 new: crypto round-trip, owner binding, tampering, key sources, repository), shared (2), server (2), e2e (2, incl. criterion 17 with a secret that ends up in the page URL) and a UI test.
+
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.
-- **Phase 3 (rest):** secrets (encryption at rest, redaction in runs), auth profiles.
+- **Phase 3 (rest):** auth profiles (saved login sessions).
 - **Phase 4:** recorder.
 - **Phase 5:** bootstrap token, artifact retention/quota, remaining acceptance criteria (1, 2, 4–9, 12, 13, 17, 21, 24, 29, 31) and e2e for real process restart and redirect bypass.
 
 ## Next concrete task
 
-Secrets: encrypted storage with the master key, `{{secrets.name}}` in fill values and headers, redaction everywhere, run refuses to start when a required secret is missing.
+Auth profiles: capture a login session in a visible browser, store it encrypted, load it into new runs (cookies, localStorage, IndexedDB), bound to one environment.

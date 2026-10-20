@@ -204,3 +204,49 @@ describe('project deletion', () => {
     expect(res.json().error.code).toBe('FORBIDDEN_ORIGIN');
   });
 });
+
+describe('secrets', () => {
+  const VALUE = 'Pa55word-for-tests';
+
+  it('never return the value and enforce the minimum length', async () => {
+    const { project } = await seed();
+    const created = await call('POST', `/api/projects/${project.id}/secrets`, { name: 'testPassword', value: VALUE });
+    expect(created.statusCode).toBe(201);
+    expect(created.body).not.toContain(VALUE);
+    const list = await call('GET', `/api/projects/${project.id}/secrets`);
+    expect(list.json().map((s: { name: string }) => s.name)).toEqual(['testPassword']);
+    expect(list.body).not.toContain(VALUE);
+
+    const short = await call('POST', `/api/projects/${project.id}/secrets`, { name: 'pin', value: '1234' });
+    expect(short.json().error.code).toBe('SECRET_TOO_SHORT');
+    expect(short.body).not.toContain('1234"');
+
+    const replaced = await call('PUT', `/api/secrets/${created.json().id}`, { value: 'another-long-value' });
+    expect(replaced.statusCode).toBe(200);
+    expect(replaced.body).not.toContain('another-long-value');
+  });
+
+  it('a run that needs a missing secret does not start', async () => {
+    const { project, env } = await seed();
+    const def = {
+      ...definition,
+      inputs: [],
+      steps: [
+        {
+          id: 'pw',
+          name: 'Password',
+          type: 'fill',
+          locator: { kind: 'label', value: 'Password', exact: true },
+          value: '{{secrets.testPassword}}',
+        },
+      ],
+    };
+    const tc = (await call('POST', `/api/projects/${project.id}/test-cases`, { name: 'Login', definition: def })).json();
+    const refused = await call('POST', `/api/test-cases/${tc.testCase.id}/runs`, { environmentId: env.id });
+    expect(refused.json().error.code).toBe('SECRET_NOT_FOUND');
+    expect(refused.json().error.details.missing).toEqual(['testPassword']);
+
+    await call('POST', `/api/projects/${project.id}/secrets`, { name: 'testPassword', value: VALUE });
+    expect((await call('POST', `/api/test-cases/${tc.testCase.id}/runs`, { environmentId: env.id })).statusCode).toBe(202);
+  });
+});

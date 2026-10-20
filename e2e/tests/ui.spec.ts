@@ -321,3 +321,31 @@ test('a request check on a click keeps the order id for a later API step', async
   await page.getByRole('button', { name: 'Start run' }).click();
   await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
 });
+
+test('secrets are added in the project and picked in a "Type text" step without showing the value', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(projectId, definition([{ id: 'open', name: 'Open form', type: 'navigate', url: '/form' }]));
+
+  await page.goto(`${SERVER}/projects/${projectId}`);
+  await page.getByRole('tab', { name: 'Secrets' }).click();
+  await page.getByRole('button', { name: 'Add secret' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name').fill('testPassword');
+  await dialog.getByLabel('Value').fill('short');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByText(/at least 8 characters/).first()).toBeVisible();
+  await dialog.getByLabel('Value').fill('a-very-secret-value');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Use as {{secrets.testPassword}}')).toBeVisible();
+  await expect(page.getByText('a-very-secret-value')).toHaveCount(0);
+
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await addStep(page, /^Type text/);
+  const step = page.getByTestId('step-steps-1');
+  await step.getByLabel('Element', { exact: true }).fill('password');
+  await step.getByLabel('Text to type').fill('hunter2-plain');
+  await expect(step.getByText('looks like a password typed as plain text')).toBeVisible();
+  await step.getByLabel('Use a secret:').selectOption('testPassword');
+  await expect(step.getByLabel('Text to type')).toHaveValue('{{secrets.testPassword}}');
+  await expect(step.getByText('looks like a password typed as plain text')).toHaveCount(0);
+});

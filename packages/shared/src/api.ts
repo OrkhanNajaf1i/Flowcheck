@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ErrorCode } from './errors.ts';
 import type { EnvironmentKind, RunStatus, StepPhase, StepStatus } from './status.ts';
 import { environmentKindSchema } from './status.ts';
+import { isValidVariableName } from './templates.ts';
 
 /**
  * Request bodies and response DTOs of the REST API (PROJECT_RULES §18).
@@ -204,4 +205,23 @@ export interface ArtifactDto {
   size: number;
   sensitive: boolean;
   createdAt: string;
+}
+
+// ---- Secrets ----
+
+export const createSecretSchema = z.strictObject({
+  name: z.string().refine(isValidVariableName, 'Use letters, digits and "_", starting with a letter, e.g. testPassword'),
+  /** Never echoed back. Minimum length is enforced by the server (SECRET_TOO_SHORT). */
+  value: z.string().min(1).max(10_000),
+});
+export const replaceSecretSchema = z.strictObject({ value: z.string().min(1).max(10_000) });
+export type CreateSecretBody = z.input<typeof createSecretSchema>;
+
+/** A secret as the API shows it: the value is never included. */
+export interface SecretDto {
+  id: string;
+  projectId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
 }

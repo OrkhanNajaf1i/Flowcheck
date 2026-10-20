@@ -10,6 +10,7 @@ import type {
   RevisionDto,
   RunDto,
   RunStatus,
+  SecretDto,
   TestCaseDto,
   ValidationIssue,
 } from '@flowcheck/shared';
@@ -77,6 +78,11 @@ export const api = {
   project: (id: string) => get<ProjectDto>(`projects/${id}`),
   createProject: (body: CreateProjectBody) => post<ProjectDto>('projects', body),
   deleteProject: (id: string) => del(`projects/${id}`),
+
+  secrets: (projectId: string) => get<SecretDto[]>(`projects/${projectId}/secrets`),
+  createSecret: (projectId: string, body: { name: string; value: string }) => post<SecretDto>(`projects/${projectId}/secrets`, body),
+  replaceSecret: (id: string, value: string) => call(http.put(`secrets/${id}`, { json: { value } }).json<SecretDto>()),
+  deleteSecret: (id: string) => del(`secrets/${id}`),
 
   environments: (projectId: string) => get<EnvironmentDto[]>(`projects/${projectId}/environments`),
   createEnvironment: (projectId: string, body: CreateEnvironmentBody) => post<EnvironmentDto>(`projects/${projectId}/environments`, body),

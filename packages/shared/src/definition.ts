@@ -497,10 +497,6 @@ export const testDefinitionV1Schema = z
       if (ref.namespace === 'outputs' && !availableOutputs.has(ref.name)) {
         ctx.addIssue({ code: 'custom', path, message: `${ref.raw} is not set by any earlier step` });
       }
-      if (ref.namespace === 'secrets') {
-        // Secrets arrive later in implementation phase 3.
-        ctx.addIssue({ code: 'custom', path, message: `${ref.raw}: "secrets" variables are not supported yet` });
-      }
     }
   });
 export type TestDefinitionV1 = z.infer<typeof testDefinitionV1Schema>;
@@ -560,6 +556,17 @@ export function resolveInputs(def: TestDefinition, provided: Record<string, Inpu
     values[input.name] = value;
   }
   return issues.length > 0 ? { ok: false, issues } : { ok: true, values };
+}
+
+/** Names of all secrets a definition refers to ({{secrets.name}}), sorted and unique. */
+export function referencedSecrets(def: TestDefinition): string[] {
+  const names = new Set<string>();
+  for (const { step } of allSteps(def)) {
+    for (const tpl of stepTemplates(step)) {
+      for (const ref of templateRefs(tpl.value)) if (ref.namespace === 'secrets') names.add(ref.name);
+    }
+  }
+  return [...names].sort();
 }
 
 export function allSteps(def: TestDefinition) {

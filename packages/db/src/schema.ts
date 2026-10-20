@@ -164,3 +164,19 @@ export const executionLock = sqliteTable(
   },
   (t) => [check('execution_lock_single_row', sql`${t.id} = 1`)],
 );
+
+/** Encrypted secret values; the plaintext is never stored or returned by the API. */
+export const secrets = sqliteTable(
+  'secrets',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    name: text('name').notNull(),
+    /** "v1.<iv>.<tag>.<ciphertext>", see secret-box.ts. */
+    encryptedValue: text('encrypted_value').notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('secrets_project_name_uq').on(t.projectId, t.name)],
+);

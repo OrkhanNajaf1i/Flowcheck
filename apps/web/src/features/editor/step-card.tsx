@@ -36,8 +36,10 @@ import { type Path, useFieldArray, useFormContext, useWatch } from 'react-hook-f
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
+import { PlainPasswordWarning, SecretPicker } from '@/features/secrets/secrets-panel';
 import { t } from '@/i18n';
 import { blankAssertion, type EditorForm, type LocatorKind, type Phase, type StepForm, stepSummary } from './definition-form';
+import { useEditorContext } from './editor-context';
 import { AssertionsEditor, NetworkChecksSection, OutputsEditor } from './response-editors';
 import { SuggestFromHtmlDialog } from './suggest-dialog';
 
@@ -88,7 +90,14 @@ export interface StepCardProps {
   defaultOpen?: boolean;
 }
 
+/** A password-like field filled with literal text instead of a secret. */
+function looksLikePlainPassword(step: StepForm): boolean {
+  const target = `${step.locator.value} ${step.locator.attrName}`;
+  return /pass|parol|şifr|sifr|secret/i.test(target) && step.value.trim() !== '' && !step.value.includes('{{secrets.');
+}
+
 export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOpen = false }: StepCardProps) {
+  const { projectId } = useEditorContext();
   const { register, setValue, getValues } = useFormContext<EditorForm>();
   const prefix = `${phase}.${index}` as const;
   const step = useWatch<EditorForm, `${Phase}.${number}`>({ name: prefix }) as StepForm;
@@ -171,9 +180,13 @@ export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOp
           {step.type === 'assertHidden' ? <p className="text-xs text-muted-foreground">{t.steps.hiddenRule}</p> : null}
 
           {step.type === 'fill' ? (
-            <Field label={t.steps.value} htmlFor={`${prefix}-value`} error={err('value')}>
-              <Input id={`${prefix}-value`} {...register(`${prefix}.value`)} />
-            </Field>
+            <div className="flex flex-col gap-2">
+              <Field label={t.steps.value} htmlFor={`${prefix}-value`} error={err('value')}>
+                <Input id={`${prefix}-value`} aria-invalid={!!err('value')} {...register(`${prefix}.value`)} />
+              </Field>
+              <SecretPicker projectId={projectId} onPick={(ref) => setValue(`${prefix}.value`, ref, { shouldDirty: true })} />
+              {looksLikePlainPassword(step) ? <PlainPasswordWarning /> : null}
+            </div>
           ) : null}
 
           {step.type === 'assertText' ? (

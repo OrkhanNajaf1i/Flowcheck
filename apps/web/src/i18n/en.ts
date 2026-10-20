@@ -112,7 +112,8 @@ export const en = {
       pageText: { title: 'Page shows text', description: 'Open a page and check that a text is visible.' },
       api: { title: 'API check', description: 'Call an API endpoint and check status and response.' },
     },
-    templateNote: 'Templates use example values (field names, button text). Change them to match your website.',
+    templateNote:
+      'Templates use example values (field names, button text). Change them to match your website. The login template reads the password from the secret "testPassword" — add it under Project → Secrets.',
   },
   editor: {
     unsaved: 'You have unsaved changes. Leave anyway?',
@@ -329,6 +330,28 @@ export const en = {
     inputType: 'Input type',
     inputDefault: 'default (optional)',
     inputRequired: 'required',
+  },
+  secrets: {
+    tab: 'Secrets',
+    intro:
+      'Passwords, tokens and other sensitive values. They are stored encrypted, are never shown again after saving, and are replaced by [REDACTED] in run reports. Use them in "Type text" values and API headers as {{secrets.name}} — not in addresses or checks.',
+    keyNote:
+      'They are encrypted with the master key (FLOWCHECK_MASTER_KEY or data/master.key). If that key is lost, the secrets cannot be recovered and have to be entered again.',
+    add: 'Add secret',
+    empty: 'No secrets yet',
+    name: 'Name',
+    nameHint: 'Letters, digits and "_", e.g. testPassword',
+    value: 'Value',
+    valueHint: 'At least 8 characters (shorter values cannot be hidden reliably in reports).',
+    replace: 'Replace value',
+    replaceTitle: (name: string) => `New value for "${name}"`,
+    deleteConfirm: (name: string) => `Delete the secret "${name}"? Tests that use it will not start until it exists again.`,
+    updated: 'Updated',
+    usage: (ref: string) => `Use as ${ref}`,
+    insert: 'Use a secret',
+    insertNone: 'No secrets in this project yet — add one under Project → Secrets.',
+    plainPasswordWarning:
+      'This looks like a password typed as plain text. Store it as a secret so it does not appear in the test or in reports.',
   },
   network: {
     title: 'Check the request this action sends (optional)',

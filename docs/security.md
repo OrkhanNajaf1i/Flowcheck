@@ -35,6 +35,6 @@ FlowCheck sends real requests to systems you configure. Running locally is **not
 - **Screenshots are not redacted.** They can contain personal data and are marked `sensitive`.
 - Redaction is best effort, not a guarantee (transformed or split secrets are not detected).
 
-## Secrets (phase 3, planned)
+## Secrets
 
-AES-256-GCM at rest with a master key from `FLOWCHECK_MASTER_KEY` or `data/master.key`. If the key is lost, secrets and auth profiles cannot be recovered. No key rotation in v1. On Windows the key file's POSIX `0600` mode does not apply; protect `data/` with NTFS permissions of your user profile.
+Stored with AES-256-GCM (random IV per value, the project and secret name as authenticated data, so a ciphertext cannot be moved to another secret). Master key: `FLOWCHECK_MASTER_KEY=base64:<32 bytes>`, or a passphrase of at least 16 characters (scrypt, salt in `data/kdf.json`), or the generated `data/master.key`. The API never returns a value; values shorter than 8 characters are rejected (`SECRET_TOO_SHORT`). `{{secrets.name}}` works only in "Type text" values and request headers, never in URLs, paths, query parameters or assertions. A run that needs a missing secret does not start (`SECRET_NOT_FOUND`); the runner decrypts only the secrets the test uses. All step evidence and error messages are scrubbed of known secret values before they are stored — screenshots are not. If the key is lost, secrets and auth profiles cannot be recovered. No key rotation in v1. On Windows the key file's POSIX `0600` mode does not apply; protect `data/` with NTFS permissions of your user profile.

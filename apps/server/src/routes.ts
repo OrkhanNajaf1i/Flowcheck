@@ -6,8 +6,10 @@ import {
   createProject,
   createRevision,
   createRun,
+  createSecret,
   createTestCase,
   deleteProject,
+  deleteSecret,
   duplicateTestCase,
   type FlowDb,
   getArtifact,
@@ -22,7 +24,11 @@ import {
   listProjects,
   listRevisions,
   listRunsForTestCase,
+  listSecrets,
   listTestCases,
+  loadMasterKey,
+  missingSecrets,
+  replaceSecretValue,
   requestCancel,
   updateEnvironment,
   updateProject,
@@ -33,8 +39,11 @@ import {
   createProjectSchema,
   createRevisionSchema,
   createRunSchema,
+  createSecretSchema,
   createTestCaseSchema,
   parseDefinition,
+  referencedSecrets,
+  replaceSecretSchema,
   resolveInputs,
   type TestDefinition,
   updateEnvironmentSchema,
@@ -45,7 +54,7 @@ import {
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { ServerConfig } from './config.ts';
-import { environmentDto, environmentSnapshot, projectDto, revisionDto, runDto, testCaseDto } from './dto.ts';
+import { environmentDto, environmentSnapshot, projectDto, revisionDto, runDto, secretDto, testCaseDto } from './dto.ts';
 import { HttpError, validationError } from './errors.ts';
 
 const idParam = <K extends string>(name: K) => z.object({ [name]: z.string().min(1).max(64) } as Record<K, z.ZodString>);
@@ -63,6 +72,24 @@ function validateDefinition(input: unknown): { schemaVersion: number; definition
 
 export function apiRoutes(db: FlowDb, config: ServerConfig): FastifyPluginAsyncZod {
   return async (app) => {
+    const master = loadMasterKey(config.dataDir);
+    if (master.warning) app.log.warn(master.warning);
+
+    // ---- Secrets: values go in, never come out ----
+    app.get('/projects/:projectId/secrets', { schema: { params: idParam('projectId') } }, async (req) =>
+      listSecrets(db, req.params.projectId).map(secretDto),
+    );
+    app.post('/projects/:projectId/secrets', { schema: { params: idParam('projectId'), body: createSecretSchema } }, async (req, reply) =>
+      reply.code(201).send(secretDto(createSecret(db, master, req.params.projectId, req.body.name, req.body.value))),
+    );
+    app.put('/secrets/:secretId', { schema: { params: idParam('secretId'), body: replaceSecretSchema } }, async (req) =>
+      secretDto(replaceSecretValue(db, master, req.params.secretId, req.body.value)),
+    );
+    app.delete('/secrets/:secretId', { schema: { params: idParam('secretId') } }, async (req, reply) => {
+      deleteSecret(db, req.params.secretId);
+      return reply.code(204).send();
+    });
+
     // ---- Projects ----
     app.get('/projects', async () => listProjects(db).map(projectDto));
 
@@ -190,6 +217,13 @@ export function apiRoutes(db: FlowDb, config: ServerConfig): FastifyPluginAsyncZ
       const parsed = parseDefinition(revision.definition);
       if (!parsed.ok) {
         throw new HttpError(parsed.code, parsed.code === 'UNSUPPORTED_SCHEMA_VERSION' ? parsed.message : 'Stored definition is invalid');
+      }
+      // A run never starts without the secrets it needs.
+      const missing = missingSecrets(db, testCase.projectId, referencedSecrets(parsed.definition));
+      if (missing.length > 0) {
+        throw new HttpError('SECRET_NOT_FOUND', `This test needs secret(s) that do not exist in the project: ${missing.join(', ')}`, {
+          missing,
+        });
       }
       const inputs = resolveInputs(parsed.definition, req.body.inputs);
       if (!inputs.ok) {

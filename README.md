@@ -67,6 +67,7 @@ HTTP 4xx/5xx is not a failure by itself — a test expecting `403` passes when i
 - **Test data**: each run uses a fresh browser, but that does not clean data on your server. Only explicit cleanup steps do.
 - **Service workers** are blocked in test browsers so they cannot bypass request inspection.
 - **SSRF protection**: only allowlisted origins; resolved IPs are checked; cloud metadata addresses are always blocked; private/loopback targets need "Allow private network". There is a residual DNS TOCTOU risk — see [docs/security.md](docs/security.md).
+- **Secrets**: passwords and tokens go under *Project → Secrets*. They are stored encrypted, never shown again, and replaced by `[REDACTED]` in reports. Use them as `{{secrets.name}}` in "Type text" values and API headers (the "Use a secret" picker inserts it). If the master key (`FLOWCHECK_MASTER_KEY` or `data/master.key`) is lost, secrets cannot be recovered — enter them again.
 - **Screenshots** of failed UI steps may contain personal data; they are not redacted.
 - **Login-protected pages** are not supported yet (auth profiles come in phase 3). You can test login itself with *Type into field* + *Click* steps.
 

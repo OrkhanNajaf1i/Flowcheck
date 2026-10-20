@@ -113,7 +113,8 @@ export const az: Dict = {
       pageText: { title: 'Səhifədə mətn görünür', description: 'Səhifəni açır və müəyyən mətnin göründüyünü yoxlayır.' },
       api: { title: 'API yoxlaması', description: 'API endpoint-ə sorğu göndərir, statusu və cavabı yoxlayır.' },
     },
-    templateNote: 'Şablonlarda nümunə dəyərlər var (sahə adları, düymə yazısı). Onları saytınızdakı ilə əvəz edin.',
+    templateNote:
+      'Şablonlarda nümunə dəyərlər var (sahə adları, düymə yazısı). Onları saytınızdakı ilə əvəz edin. Login şablonu parolu "testPassword" gizli dəyərindən götürür — onu Layihə → Gizli dəyərlər bölməsində əlavə edin.',
   },
   editor: {
     unsaved: 'Saxlanmamış dəyişikliklər var. Yenə də çıxılsın?',
@@ -331,6 +332,28 @@ export const az: Dict = {
     inputType: 'Dəyişənin tipi',
     inputDefault: 'standart dəyər (istəyə bağlı)',
     inputRequired: 'məcburi',
+  },
+  secrets: {
+    tab: 'Gizli dəyərlər',
+    intro:
+      'Parollar, tokenlər və digər həssas dəyərlər. Şifrələnmiş saxlanılır, saxlandıqdan sonra bir daha göstərilmir və test nəticələrində [REDACTED] ilə əvəz olunur. "Mətn yaz" dəyərlərində və API header-lərində {{secrets.ad}} kimi istifadə edin — ünvanlarda və yoxlamalarda yox.',
+    keyNote:
+      'Master açarla şifrələnir (FLOWCHECK_MASTER_KEY və ya data/master.key). Bu açar itərsə, gizli dəyərlər bərpa olunmur və yenidən daxil edilməlidir.',
+    add: 'Gizli dəyər əlavə et',
+    empty: 'Hələ gizli dəyər yoxdur',
+    name: 'Ad',
+    nameHint: 'Hərf, rəqəm və "_", məsələn testParol',
+    value: 'Dəyər',
+    valueHint: 'Ən azı 8 simvol (qısa dəyərləri nəticələrdə etibarlı gizlətmək olmur).',
+    replace: 'Dəyəri dəyiş',
+    replaceTitle: (name: string) => `"${name}" üçün yeni dəyər`,
+    deleteConfirm: (name: string) =>
+      `"${name}" gizli dəyəri silinsin? Onu istifadə edən testlər o yenidən əlavə olunana qədər başlamayacaq.`,
+    updated: 'Yenilənib',
+    usage: (ref: string) => `${ref} kimi istifadə edin`,
+    insert: 'Gizli dəyər istifadə et',
+    insertNone: 'Bu layihədə hələ gizli dəyər yoxdur — Layihə → Gizli dəyərlər bölməsində əlavə edin.',
+    plainPasswordWarning: 'Bu, açıq mətnlə yazılmış parola oxşayır. Testdə və nəticələrdə görünməməsi üçün onu gizli dəyər kimi saxlayın.',
   },
   network: {
     title: 'Bu hərəkətin göndərdiyi sorğunu yoxla (istəyə bağlı)',
