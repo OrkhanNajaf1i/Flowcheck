@@ -184,6 +184,11 @@ export const en = {
     },
     pickerGroups: { actions: 'Do something', checks: 'Check something', api: 'Backend' },
     typeLabel: 'Step type',
+    withinToggle: 'Search only inside another element (optional)',
+    withinHint:
+      'Use it when the same text appears in several places, e.g. the "Search" button inside the element with id "header". That container must also be unique on the page.',
+    withinKind: 'Container: find it by',
+    withinValue: 'Container',
     attrName: 'Attribute',
     attrValue: 'Value (exact)',
     generatedId:
@@ -297,6 +302,7 @@ export const en = {
       element: (how: string, value: string) => (value ? `${how} "${value}"` : how),
       fill: (target: string, value: string) => `type "${value}" into ${target}`,
       api: (method: string, path: string) => `${method} ${path}`,
+      within: (target: string, container: string) => `${target} inside ${container}`,
       text: (target: string, mode: 'exact' | 'contains', value: string) => `${target} ${mode === 'exact' ? 'is' : 'contains'} "${value}"`,
       hidden: (target: string) => `${target} is not shown`,
       value: (target: string, value: string) => `${target} has value "${value}"`,
@@ -360,7 +366,8 @@ export const en = {
     hints: {
       LOCATOR_NOT_FOUND:
         'Compare the screenshot with your step: is the text exactly the same (capital letters, spaces)? Did the page finish loading or show something else (error, cookie banner, login page)?',
-      AMBIGUOUS_LOCATOR: 'Several elements match. Use a more specific text, a test id, or the button name instead of a general text.',
+      AMBIGUOUS_LOCATOR:
+        'Several elements match. Use a more specific text, a test id or the button name — or tick "Search only inside another element" and choose the section it is in (e.g. by id).',
       ACTION_FAILED: 'The element exists but could not be used — it may be hidden, disabled or covered (e.g. by a popup or cookie banner).',
       ASSERTION_FAILED: 'The page or API answered, but not with what you expected. Compare "Expected" and "Actual" below.',
       ORIGIN_NOT_ALLOWED:

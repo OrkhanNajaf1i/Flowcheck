@@ -185,6 +185,11 @@ export const az: Dict = {
     },
     pickerGroups: { actions: 'Hərəkət et', checks: 'Yoxla', api: 'Backend' },
     typeLabel: 'Addımın növü',
+    withinToggle: 'Yalnız başqa elementin daxilində axtar (istəyə bağlı)',
+    withinHint:
+      'Eyni yazı bir neçə yerdə olanda istifadə edin, məsələn id-si "header" olan blokun içindəki "Axtar" düyməsi. Həmin blok da səhifədə tək olmalıdır.',
+    withinKind: 'Daxilində olduğu element: necə tapaq',
+    withinValue: 'Daxilində olduğu element',
     attrName: 'Atribut',
     attrValue: 'Dəyər (dəqiq)',
     generatedId:
@@ -298,6 +303,7 @@ export const az: Dict = {
       element: (how: string, value: string) => (value ? `${how} "${value}"` : how),
       fill: (target: string, value: string) => `${target} sahəsinə "${value}" yazılır`,
       api: (method: string, path: string) => `${method} ${path}`,
+      within: (target: string, container: string) => `${container} daxilində ${target}`,
       text: (target: string, mode: 'exact' | 'contains', value: string) =>
         mode === 'exact' ? `${target} mətni "${value}"-dir` : `${target} mətnində "${value}" var`,
       hidden: (target: string) => `${target} görünmür`,
@@ -362,7 +368,8 @@ export const az: Dict = {
     hints: {
       LOCATOR_NOT_FOUND:
         'Ekran görüntüsünü addımla müqayisə edin: mətn dəqiq eynidirmi (böyük hərflər, boşluqlar)? Səhifə tam yüklənibmi, yoxsa başqa şey göstərir (xəta, cookie pəncərəsi, login səhifəsi)?',
-      AMBIGUOUS_LOCATOR: 'Bir neçə element uyğun gəlir. Daha dəqiq mətn, test id və ya ümumi mətn əvəzinə düymənin adını istifadə edin.',
+      AMBIGUOUS_LOCATOR:
+        'Bir neçə element uyğun gəlir. Daha dəqiq mətn, test id və ya düymənin adını istifadə edin — ya da "Yalnız başqa elementin daxilində axtar"-ı işarələyib elementin yerləşdiyi bölməni seçin (məsələn id ilə).',
       ACTION_FAILED:
         'Element var, amma istifadə oluna bilmədi — gizli, deaktiv və ya üstü örtülü ola bilər (məsələn popup və ya cookie pəncərəsi ilə).',
       ASSERTION_FAILED: 'Səhifə və ya API cavab verdi, amma gözlədiyiniz kimi yox. Aşağıda "Gözlənilən" və "Faktiki"-ni müqayisə edin.',

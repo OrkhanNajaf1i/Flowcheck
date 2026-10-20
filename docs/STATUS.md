@@ -77,6 +77,10 @@ Evidence: shared (3 new), engine (4 new), web round-trip (1 new), e2e steps.spec
 
 ID, other attribute (name + exact value), image alt text and title locators, plus a warning for auto-generated ids. Evidence: shared (3 new), web round-trip (extended), e2e steps.spec (1: id, aria-label via role, title, alt, attribute, quote-injection attempt) and UI test (1).
 
+## Scoped locators — done
+
+Optional "search only inside another element" (`locator.within`, one level). Evidence: shared (1 new), web round-trip (extended), e2e steps.spec (scoped vs. unscoped, ambiguous container, missing container) and UI test (1).
+
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.

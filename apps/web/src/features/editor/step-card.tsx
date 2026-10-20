@@ -31,12 +31,20 @@ import {
   Webhook,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useFieldArray, useFormContext, useWatch } from 'react-hook-form';
+import { type Path, useFieldArray, useFormContext, useWatch } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { t } from '@/i18n';
-import { type AssertionKind, blankAssertion, type EditorForm, type Phase, type StepForm, stepSummary } from './definition-form';
+import {
+  type AssertionKind,
+  blankAssertion,
+  type EditorForm,
+  type LocatorKind,
+  type Phase,
+  type StepForm,
+  stepSummary,
+} from './definition-form';
 
 /** Step types grouped the way the picker shows them. */
 export const STEP_GROUPS: { id: 'actions' | 'checks' | 'api'; types: StepType[] }[] = [
@@ -290,77 +298,30 @@ export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOp
 
 type Prefix = `${Phase}.${number}`;
 
+type LocatorPath = `${Phase}.${number}.locator` | `${Phase}.${number}.locator.within`;
+
 function LocatorFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => string | undefined }) {
   const { register } = useFormContext<EditorForm>();
-  const kind = useWatch<EditorForm, `${Phase}.${number}.locator.kind`>({ name: `${prefix}.locator.kind` });
-  const idValue = useWatch<EditorForm, `${Phase}.${number}.locator.value`>({ name: `${prefix}.locator.value` });
-  const valueError = err('locator.value') ?? err('locator.name');
+  const withinEnabled = useWatch({ name: `${prefix}.locator.withinEnabled` as Path<EditorForm> }) as boolean;
 
   return (
     <div className="flex flex-col gap-2 rounded-md bg-muted/60 p-3">
-      <div className="grid gap-3 md:grid-cols-[260px_1fr]">
-        <Field label={t.steps.locatorKind} htmlFor={`${prefix}-lk`}>
-          <Select id={`${prefix}-lk`} {...register(`${prefix}.locator.kind`)}>
-            {Object.entries(t.steps.locatorKinds).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        {kind === 'attribute' ? (
-          <div className="grid grid-cols-[150px_1fr] gap-3">
-            <Field label={t.steps.attrName} htmlFor={`${prefix}-an`} error={err('locator.name')}>
-              <Input
-                id={`${prefix}-an`}
-                aria-invalid={!!err('locator.name')}
-                placeholder="name"
-                {...register(`${prefix}.locator.attrName`)}
-              />
-            </Field>
-            <Field label={t.steps.attrValue} htmlFor={`${prefix}-lv`} error={valueError}>
-              <Input id={`${prefix}-lv`} aria-invalid={!!valueError} placeholder="email" {...register(`${prefix}.locator.value`)} />
-            </Field>
-          </div>
-        ) : kind === 'role' ? (
-          <div className="grid grid-cols-[130px_1fr] gap-3">
-            <Field label={t.steps.role} htmlFor={`${prefix}-role`}>
-              <Select id={`${prefix}-role`} {...register(`${prefix}.locator.role`)}>
-                {ARIA_ROLES.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={t.steps.accessibleName} htmlFor={`${prefix}-lv`} error={valueError}>
-              <Input
-                id={`${prefix}-lv`}
-                aria-invalid={!!valueError}
-                placeholder={t.steps.locatorPlaceholders.role}
-                {...register(`${prefix}.locator.value`)}
-              />
-            </Field>
-          </div>
-        ) : (
-          <Field label={t.steps.locator} htmlFor={`${prefix}-lv`} error={valueError}>
-            <Input
-              id={`${prefix}-lv`}
-              aria-invalid={!!valueError}
-              placeholder={t.steps.locatorPlaceholders[kind]}
-              {...register(`${prefix}.locator.value`)}
-            />
-          </Field>
-        )}
-      </div>
-      {kind === 'id' && looksGeneratedId(idValue ?? '') ? <p className="text-xs text-warning">⚠ {t.steps.generatedId}</p> : null}
-      {kind === 'label' || kind === 'placeholder' || kind === 'text' || kind === 'altText' || kind === 'title' ? (
-        <label className="flex items-center gap-2 text-xs">
-          <input type="checkbox" {...register(`${prefix}.locator.exact`)} /> {t.steps.exact}
-        </label>
-      ) : null}
-      {kind === 'css' ? <p className="text-xs text-warning">⚠ {t.steps.fragile}</p> : null}
+      <LocatorKindFields path={`${prefix}.locator`} idBase={`${prefix}-l`} err={(sub) => err(`locator.${sub}`)} />
       <p className="text-xs text-muted-foreground">{t.steps.locatorRule}</p>
+
+      <div className="flex flex-col gap-2 rounded-md border border-dashed border-border bg-card/60 p-2">
+        <label className="flex items-start gap-2 text-xs">
+          <input type="checkbox" className="mt-0.5" {...register(`${prefix}.locator.withinEnabled`)} />
+          <span>
+            <span className="font-medium">{t.steps.withinToggle}</span>
+            <span className="block text-muted-foreground">{t.steps.withinHint}</span>
+          </span>
+        </label>
+        {withinEnabled ? (
+          <LocatorKindFields path={`${prefix}.locator.within`} idBase={`${prefix}-w`} err={(sub) => err(`locator.within.${sub}`)} />
+        ) : null}
+      </div>
+
       <details className="text-xs">
         <summary className="inline-flex cursor-pointer items-center gap-1 text-primary">
           <HelpCircle className="size-3.5" /> {t.steps.locatorHelpTitle}
@@ -372,6 +333,73 @@ function LocatorFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => 
         </ol>
       </details>
     </div>
+  );
+}
+
+/** "Find the element by" + its value fields; used for the element and for its container. */
+function LocatorKindFields({ path, idBase, err }: { path: LocatorPath; idBase: string; err: (sub: string) => string | undefined }) {
+  const { register } = useFormContext<EditorForm>();
+  const reg = (field: string) => register(`${path}.${field}` as Path<EditorForm>);
+  const kind = useWatch({ name: `${path}.kind` as Path<EditorForm> }) as LocatorKind;
+  const value = useWatch({ name: `${path}.value` as Path<EditorForm> }) as string | undefined;
+  const valueError = err('value') ?? err('name');
+  const isContainer = path.endsWith('.within');
+
+  return (
+    <>
+      <div className="grid gap-3 md:grid-cols-[260px_1fr]">
+        <Field label={isContainer ? t.steps.withinKind : t.steps.locatorKind} htmlFor={`${idBase}k`}>
+          <Select id={`${idBase}k`} {...reg('kind')}>
+            {Object.entries(t.steps.locatorKinds).map(([option, label]) => (
+              <option key={option} value={option}>
+                {label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {kind === 'attribute' ? (
+          <div className="grid grid-cols-[150px_1fr] gap-3">
+            <Field label={t.steps.attrName} htmlFor={`${idBase}an`} error={err('name')}>
+              <Input id={`${idBase}an`} aria-invalid={!!err('name')} placeholder="name" {...reg('attrName')} />
+            </Field>
+            <Field label={t.steps.attrValue} htmlFor={`${idBase}v`} error={valueError}>
+              <Input id={`${idBase}v`} aria-invalid={!!valueError} placeholder="email" {...reg('value')} />
+            </Field>
+          </div>
+        ) : kind === 'role' ? (
+          <div className="grid grid-cols-[130px_1fr] gap-3">
+            <Field label={t.steps.role} htmlFor={`${idBase}r`}>
+              <Select id={`${idBase}r`} {...reg('role')}>
+                {ARIA_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label={t.steps.accessibleName} htmlFor={`${idBase}v`} error={valueError}>
+              <Input id={`${idBase}v`} aria-invalid={!!valueError} placeholder={t.steps.locatorPlaceholders.role} {...reg('value')} />
+            </Field>
+          </div>
+        ) : (
+          <Field label={isContainer ? t.steps.withinValue : t.steps.locator} htmlFor={`${idBase}v`} error={valueError}>
+            <Input
+              id={`${idBase}v`}
+              aria-invalid={!!valueError}
+              placeholder={isContainer && kind === 'id' ? 'header' : t.steps.locatorPlaceholders[kind]}
+              {...reg('value')}
+            />
+          </Field>
+        )}
+      </div>
+      {kind === 'id' && looksGeneratedId(value ?? '') ? <p className="text-xs text-warning">⚠ {t.steps.generatedId}</p> : null}
+      {kind === 'label' || kind === 'placeholder' || kind === 'text' || kind === 'altText' || kind === 'title' ? (
+        <label className="flex items-center gap-2 text-xs">
+          <input type="checkbox" {...reg('exact')} /> {t.steps.exact}
+        </label>
+      ) : null}
+      {kind === 'css' ? <p className="text-xs text-warning">⚠ {t.steps.fragile}</p> : null}
+    </>
   );
 }
 

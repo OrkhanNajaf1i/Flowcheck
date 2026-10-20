@@ -11,6 +11,8 @@
     <!-- Icon-only button: no visible text, only aria-label/title (common in real apps). -->
     <button type="button" id="account-btn" aria-label="Account" title="Your account">&#128100;</button>
   </header>
+  <!-- Two elements with the same text in different sections (scoped locator tests). -->
+  <section id="top-bar"><span>Top bar</span> <button type="button">Search</button></section>
   <h1>Newsletter sign-up</h1>
   <input type="email" name="email" placeholder="you@example.com" aria-label="Email address">
   <form id="signup">
@@ -26,6 +28,7 @@
     <p role="alert" data-testid="form-error" hidden>Please choose a country</p>
     <button type="submit" id="submit" disabled>Sign up</button>
   </form>
+  <section id="footer-tools"><button type="button" data-testid="footer-search">Search</button></section>
   <script type="module">
     const form = document.getElementById('signup');
     const terms = document.getElementById('terms');

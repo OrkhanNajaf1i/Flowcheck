@@ -63,6 +63,18 @@ const allTypes: TestDefinition = {
     { id: 'uc', name: 'Uncheck', type: 'uncheck', locator: { kind: 'testId', value: 'terms' } },
     { id: 'p1', name: 'Press', type: 'press', key: 'Enter', locator: { kind: 'testId', value: 'q' } },
     { id: 'p2', name: 'Press page', type: 'press', key: 'Control+a' },
+    {
+      id: 'w1',
+      name: 'Scoped',
+      type: 'click',
+      locator: { kind: 'text', value: 'Axtar', exact: true, within: { kind: 'id', value: 'header' } },
+    },
+    {
+      id: 'w2',
+      name: 'Scoped attr',
+      type: 'click',
+      locator: { kind: 'role', role: 'button', name: 'Go', within: { kind: 'attribute', name: 'data-qa', value: 'toolbar' } },
+    },
     { id: 'l1', name: 'Id', type: 'click', locator: { kind: 'id', value: 'account-btn' } },
     { id: 'l2', name: 'Attr', type: 'click', locator: { kind: 'attribute', name: 'aria-label', value: 'Hesab' } },
     { id: 'l3', name: 'Alt', type: 'assertVisible', locator: { kind: 'altText', value: 'Logo', exact: false } },

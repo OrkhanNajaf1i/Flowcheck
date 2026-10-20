@@ -1,6 +1,7 @@
 import type {
   ApiRequestStep,
   ARIA_ROLES,
+  BaseLocator,
   HTTP_METHODS,
   InputDefinition,
   JSON_VALUE_TYPES,
@@ -24,7 +25,7 @@ import { t } from '@/i18n';
 export type LocatorKind = Locator['kind'];
 export type AssertionKind = ResponseAssertion['kind'];
 
-export interface LocatorForm {
+export interface BaseLocatorForm {
   kind: LocatorKind;
   value: string;
   /** Attribute name for kind "attribute" (e.g. name, aria-label, data-qa). */
@@ -32,6 +33,21 @@ export interface LocatorForm {
   role: (typeof ARIA_ROLES)[number];
   exact: boolean;
 }
+
+export interface LocatorForm extends BaseLocatorForm {
+  /** Search only inside this container (optional). */
+  withinEnabled: boolean;
+  within: BaseLocatorForm;
+}
+
+const blankBaseLocator = (kind: LocatorKind = 'testId'): BaseLocatorForm => ({
+  kind,
+  value: '',
+  attrName: 'name',
+  role: 'button',
+  exact: true,
+});
+const blankLocator = (): LocatorForm => ({ ...blankBaseLocator(), withinEnabled: false, within: blankBaseLocator('id') });
 
 export interface AssertionForm {
   kind: AssertionKind;
@@ -107,7 +123,7 @@ export function blankStep(type: StepType = 'navigate', name = ''): StepForm {
     type,
     timeoutMs: '',
     url: '/',
-    locator: { kind: 'testId', value: '', attrName: 'name', role: 'button', exact: true },
+    locator: blankLocator(),
     value: '',
     method: 'GET',
     path: '/',
@@ -133,7 +149,15 @@ export function blankAssertion(kind: AssertionKind = 'statusEquals'): AssertionF
 // ---- definition -> form ----
 
 function locatorToForm(locator: Locator): LocatorForm {
-  const base: LocatorForm = { kind: locator.kind, value: '', attrName: 'name', role: 'button', exact: true };
+  return {
+    ...baseLocatorToForm(locator),
+    withinEnabled: locator.within !== undefined,
+    within: locator.within ? baseLocatorToForm(locator.within) : blankBaseLocator('id'),
+  };
+}
+
+function baseLocatorToForm(locator: BaseLocator): BaseLocatorForm {
+  const base = blankBaseLocator(locator.kind);
   switch (locator.kind) {
     case 'role':
       return { ...base, role: locator.role, value: locator.name };
@@ -269,6 +293,11 @@ function intOrUndefined(text: string, path: (string | number)[], c: Collector): 
 }
 
 function locatorFromForm(l: LocatorForm): Locator {
+  const own = baseLocatorFromForm(l);
+  return l.withinEnabled ? { ...own, within: baseLocatorFromForm(l.within) } : own;
+}
+
+function baseLocatorFromForm(l: BaseLocatorForm): BaseLocator {
   switch (l.kind) {
     case 'role':
       return { kind: 'role', role: l.role, name: l.value };
@@ -454,10 +483,10 @@ export function issueKey(path: (string | number)[]): string {
 /** One-line, human readable description of a step for collapsed cards. */
 export function stepSummary(step: StepForm): string {
   const sm = t.steps.summary;
+  const describe = (l: BaseLocatorForm) =>
+    l.kind === 'attribute' ? sm.element(`[${l.attrName}]`, l.value.trim()) : sm.element(t.steps.summaryLocator[l.kind], l.value.trim());
   const element = () =>
-    step.locator.kind === 'attribute'
-      ? sm.element(`[${step.locator.attrName}]`, step.locator.value.trim())
-      : sm.element(t.steps.summaryLocator[step.locator.kind], step.locator.value.trim());
+    step.locator.withinEnabled ? sm.within(describe(step.locator), describe(step.locator.within)) : describe(step.locator);
   switch (step.type) {
     case 'navigate':
       return sm.navigate(step.url || '/');

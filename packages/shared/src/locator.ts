@@ -76,32 +76,49 @@ const value = z
 /** HTML attribute names such as name, aria-label, data-qa. */
 export const ATTRIBUTE_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_.:-]{0,99}$/;
 
-export const locatorSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('testId'), value }),
-  z.strictObject({ kind: z.literal('role'), role: z.enum(ARIA_ROLES), name: value }),
-  z.strictObject({ kind: z.literal('label'), value, exact: z.boolean() }),
-  z.strictObject({ kind: z.literal('placeholder'), value, exact: z.boolean() }),
-  z.strictObject({ kind: z.literal('text'), value, exact: z.boolean() }),
-  z.strictObject({ kind: z.literal('altText'), value, exact: z.boolean() }),
-  z.strictObject({ kind: z.literal('title'), value, exact: z.boolean() }),
-  /** Exact id attribute value (matched as an attribute, so any characters are allowed). */
-  z.strictObject({ kind: z.literal('id'), value }),
-  /** Exact value of any attribute, e.g. name="email" or aria-label="Account". */
-  z.strictObject({
-    kind: z.literal('attribute'),
-    name: z.string().regex(ATTRIBUTE_NAME_PATTERN, 'Attribute name may contain letters, digits, "_", "-", ".", ":"'),
-    value,
-  }),
-  z.strictObject({ kind: z.literal('css'), value }),
-]);
+const attributeName = z.string().regex(ATTRIBUTE_NAME_PATTERN, 'Attribute name may contain letters, digits, "_", "-", ".", ":"');
+
+/** The locator variants, with extra shared fields (used to add the optional "within" scope). */
+function locatorVariants<E extends z.ZodRawShape>(extra: E) {
+  return [
+    z.strictObject({ kind: z.literal('testId'), value, ...extra }),
+    z.strictObject({ kind: z.literal('role'), role: z.enum(ARIA_ROLES), name: value, ...extra }),
+    z.strictObject({ kind: z.literal('label'), value, exact: z.boolean(), ...extra }),
+    z.strictObject({ kind: z.literal('placeholder'), value, exact: z.boolean(), ...extra }),
+    z.strictObject({ kind: z.literal('text'), value, exact: z.boolean(), ...extra }),
+    z.strictObject({ kind: z.literal('altText'), value, exact: z.boolean(), ...extra }),
+    z.strictObject({ kind: z.literal('title'), value, exact: z.boolean(), ...extra }),
+    /** Exact id attribute value (matched as an attribute, so any characters are allowed). */
+    z.strictObject({ kind: z.literal('id'), value, ...extra }),
+    /** Exact value of any attribute, e.g. name="email" or aria-label="Account". */
+    z.strictObject({ kind: z.literal('attribute'), name: attributeName, value, ...extra }),
+    z.strictObject({ kind: z.literal('css'), value, ...extra }),
+  ] as const;
+}
+
+/** A locator without a scope; used as the container of a scoped locator. */
+export const baseLocatorSchema = z.discriminatedUnion('kind', locatorVariants({}));
+export type BaseLocator = z.infer<typeof baseLocatorSchema>;
+
+/**
+ * A locator, optionally scoped: `within` names a container that must itself match exactly one
+ * element, and the target is searched only inside it (e.g. the "Search" button inside #header).
+ * One level only — a container has no container of its own.
+ */
+export const locatorSchema = z.discriminatedUnion('kind', locatorVariants({ within: baseLocatorSchema.optional() }));
 export type Locator = z.infer<typeof locatorSchema>;
 
 /** CSS locators are shown as "fragile" in the editor. */
 export function isFragileLocator(locator: Locator): boolean {
-  return locator.kind === 'css';
+  return locator.kind === 'css' || locator.within?.kind === 'css';
 }
 
-export function describeLocator(locator: Locator): string {
+export function describeLocator(locator: Locator | BaseLocator): string {
+  const self = describeOwn(locator);
+  return 'within' in locator && locator.within ? `${self} inside ${describeOwn(locator.within)}` : self;
+}
+
+function describeOwn(locator: BaseLocator): string {
   switch (locator.kind) {
     case 'testId':
       return `testId "${locator.value}"`;

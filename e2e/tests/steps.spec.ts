@@ -180,3 +180,60 @@ test('extra locator kinds find elements by id, attribute, alt text, title and ar
   );
   expect(run.status, JSON.stringify(run.steps.filter((s) => s.status !== 'passed'))).toBe('passed');
 });
+
+test('a scoped locator tells apart elements with the same text', async () => {
+  const { projectId, envId } = await createProjectWithEnv();
+  const search = { kind: 'text', value: 'Search', exact: true };
+  const run = await runTest(
+    projectId,
+    envId,
+    definition([
+      { id: 'open', name: 'Open form', type: 'navigate', url: '/form' },
+      { id: 'top', name: 'Search in top bar', type: 'click', locator: { ...search, within: { kind: 'id', value: 'top-bar' } } },
+      {
+        id: 'footer',
+        name: 'Search in footer',
+        type: 'assertVisible',
+        locator: { ...search, within: { kind: 'id', value: 'footer-tools' } },
+      },
+      { id: 'unscoped', name: 'Search anywhere', type: 'click', locator: search },
+    ]),
+  );
+  expect(stepStatuses(run)).toEqual(['open:passed', 'top:passed', 'footer:passed', 'unscoped:failed']);
+  expect(run.steps.find((s) => s.stepId === 'unscoped')?.errorMessage).toContain('matches 2 elements');
+
+  // The container itself must be unique, and a missing container is reported as such.
+  const run2 = await runTest(
+    projectId,
+    envId,
+    definition([
+      { id: 'open', name: 'Open form', type: 'navigate', url: '/form' },
+      {
+        id: 'twoSections',
+        name: 'Ambiguous container',
+        type: 'click',
+        locator: { ...search, within: { kind: 'css', value: 'section' } },
+        timeoutMs: 1000,
+      },
+    ]),
+  );
+  const step = run2.steps.find((s) => s.stepId === 'twoSections');
+  expect(step?.errorCode).toBe('AMBIGUOUS_LOCATOR');
+  expect(step?.errorMessage).toContain('the container must match exactly one');
+
+  const run3 = await runTest(
+    projectId,
+    envId,
+    definition([
+      { id: 'open', name: 'Open form', type: 'navigate', url: '/form' },
+      {
+        id: 'noContainer',
+        name: 'Missing container',
+        type: 'click',
+        locator: { ...search, within: { kind: 'id', value: 'nope' } },
+        timeoutMs: 1000,
+      },
+    ]),
+  );
+  expect(run3.steps.find((s) => s.stepId === 'noContainer')?.errorMessage).toContain('No container matches');
+});

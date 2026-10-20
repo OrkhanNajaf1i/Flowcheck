@@ -232,3 +232,22 @@ test('choosing an auto-generated id shows a warning; attribute locators have nam
   await page.getByRole('button', { name: 'Start run' }).click();
   await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
 });
+
+test('a step can search only inside another element', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(projectId, definition([{ id: 'open', name: 'Open form', type: 'navigate', url: '/form' }]));
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await addStep(page, /^Click/);
+  const step = page.getByTestId('step-steps-1');
+  await step.getByLabel('Find the element by').selectOption('text');
+  await step.getByLabel('Element', { exact: true }).fill('Search');
+  await step.getByLabel(/Search only inside another element/).check();
+  await step.getByLabel('Container: find it by').selectOption('id');
+  await step.getByLabel('Container', { exact: true }).fill('top-bar');
+  await expect(step.getByText('· text "Search" inside id "top-bar"')).toBeVisible();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});

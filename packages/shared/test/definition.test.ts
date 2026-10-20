@@ -149,6 +149,14 @@ describe('extra locator kinds', () => {
     expect(issues(visible({ kind: 'title', value: 'Settings', exact: false }))).toEqual([]);
   });
 
+  it('accepts one level of scope and rejects nested scopes', () => {
+    expect(issues(visible({ kind: 'text', value: 'Axtar', exact: true, within: { kind: 'id', value: 'header' } }))).toEqual([]);
+    expect(
+      issues(visible({ kind: 'text', value: 'A', exact: true, within: { kind: 'id', value: 'h', within: { kind: 'id', value: 'x' } } }))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
   it('rejects attribute names that could inject selector syntax', () => {
     expect(issues(visible({ kind: 'attribute', name: 'name], body [a', value: 'x' })).length).toBeGreaterThan(0);
     expect(issues(visible({ kind: 'attribute', name: '', value: 'x' })).length).toBeGreaterThan(0);
