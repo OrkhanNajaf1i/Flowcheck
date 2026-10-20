@@ -34,6 +34,7 @@ const definition: TestDefinition = {
 
 const allTypes: TestDefinition = {
   schemaVersion: 1,
+  authProfileId: 'profile-1',
   metadata: { tags: [] },
   inputs: [],
   setupSteps: [],

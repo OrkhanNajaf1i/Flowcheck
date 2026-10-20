@@ -47,3 +47,14 @@ describe('demo bug modes', () => {
     expect((await app.inject({ method: 'GET', url: '/api/admin-only' })).statusCode).toBe(403);
   });
 });
+
+describe('demo login', () => {
+  it('signs in with the demo password and reports the user', async () => {
+    app = buildDemoApp();
+    expect((await app.inject({ method: 'GET', url: '/api/me' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: '/api/login', payload: { username: 'qa', password: 'wrong' } })).statusCode).toBe(401);
+    const login = await app.inject({ method: 'POST', url: '/api/login', payload: { username: 'qa', password: 'demo-password' } });
+    const cookie = `demo_auth=${login.cookies.find((c) => c.name === 'demo_auth')?.value}`;
+    expect((await app.inject({ method: 'GET', url: '/api/me', headers: { cookie } })).json()).toEqual({ username: 'qa' });
+  });
+});

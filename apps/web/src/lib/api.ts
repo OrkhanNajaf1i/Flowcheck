@@ -1,5 +1,8 @@
 import type {
   ApiError as ApiErrorBody,
+  AuthCaptureDto,
+  AuthProfileDto,
+  CreateAuthCaptureBody,
   CreateEnvironmentBody,
   CreateProjectBody,
   CreateRunBody,
@@ -78,6 +81,13 @@ export const api = {
   project: (id: string) => get<ProjectDto>(`projects/${id}`),
   createProject: (body: CreateProjectBody) => post<ProjectDto>('projects', body),
   deleteProject: (id: string) => del(`projects/${id}`),
+
+  authProfiles: (projectId: string) => get<AuthProfileDto[]>(`projects/${projectId}/auth-profiles`),
+  deleteAuthProfile: (id: string) => del(`auth-profiles/${id}`),
+  startAuthCapture: (projectId: string, body: CreateAuthCaptureBody) => post<AuthCaptureDto>(`projects/${projectId}/auth-captures`, body),
+  authCapture: (id: string) => get<AuthCaptureDto>(`auth-captures/${id}`),
+  saveAuthCapture: (id: string) => post<AuthCaptureDto>(`auth-captures/${id}/save`),
+  cancelAuthCapture: (id: string) => post<AuthCaptureDto>(`auth-captures/${id}/cancel`),
 
   secrets: (projectId: string) => get<SecretDto[]>(`projects/${projectId}/secrets`),
   createSecret: (projectId: string, body: { name: string; value: string }) => post<SecretDto>(`projects/${projectId}/secrets`, body),

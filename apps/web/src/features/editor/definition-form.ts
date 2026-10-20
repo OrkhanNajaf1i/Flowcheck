@@ -157,6 +157,8 @@ export interface EditorForm {
   cleanupSteps: StepForm[];
   defaultTimeoutMs: string;
   runTimeoutMs: string;
+  /** Saved login session id, or "" for none. */
+  authProfileId: string;
 }
 
 export type Phase = 'setupSteps' | 'steps' | 'cleanupSteps';
@@ -351,6 +353,7 @@ export function toForm(testCase: { name: string; description: string }, def: Tes
     cleanupSteps: def.cleanupSteps.map(stepToForm),
     defaultTimeoutMs: def.defaultTimeoutMs?.toString() ?? '',
     runTimeoutMs: def.runTimeoutMs?.toString() ?? '',
+    authProfileId: def.authProfileId ?? '',
   };
 }
 
@@ -587,6 +590,7 @@ export function toDefinition(form: EditorForm): ToDefinitionResult {
     cleanupSteps: form.cleanupSteps.map((s, i) => stepFromForm(s, ['cleanupSteps', i], c)),
     ...(defaultTimeoutMs === undefined ? {} : { defaultTimeoutMs }),
     ...(runTimeoutMs === undefined ? {} : { runTimeoutMs }),
+    ...(form.authProfileId ? { authProfileId: form.authProfileId } : {}),
   };
   const parsed = parseDefinition(definition);
   const schemaIssues: ValidationIssue[] = parsed.ok

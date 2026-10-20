@@ -16,6 +16,7 @@ import {
   newSuffix,
   RepoError,
   type RunRow,
+  revealAuthProfile,
   revealSecrets,
 } from '@flowcheck/db';
 import { allSteps, type FailureSummary, type FinalRunStatus, parseDefinition, referencedSecrets, resolveInputs } from '@flowcheck/shared';
@@ -144,7 +145,23 @@ async function execute(
 
   try {
     browser = await chromium.launch({ headless: !config.headed });
+    // A saved login session is loaded into the new context; it is never written back.
+    let storageState: Exclude<Parameters<Browser['newContext']>[0], undefined>['storageState'];
+    if (definition.authProfileId) {
+      const { profile, storageState: state } = revealAuthProfile(db, loadMasterKey(config.dataDir), definition.authProfileId);
+      if (profile.environmentId !== run.environmentId) {
+        return {
+          status: 'error',
+          failureSummary: {
+            code: 'AUTH_PROFILE_ENVIRONMENT_MISMATCH',
+            message: `The login session "${profile.name}" belongs to another website`,
+          },
+        };
+      }
+      storageState = state as typeof storageState;
+    }
     context = await browser.newContext({
+      ...(storageState ? { storageState } : {}),
       // Service workers could bypass request interception and the target guard.
       serviceWorkers: 'block',
       acceptDownloads: false,

@@ -18,6 +18,8 @@ const env = {
   FLOWCHECK_DATA_DIR: dataDir,
   FLOWCHECK_SERVER_PORT: String(SERVER_PORT),
   DEMO_PORT: String(DEMO_PORT),
+  // The login-session capture browser is visible for real users; tests run it headless.
+  FLOWCHECK_CAPTURE_HEADLESS: '1',
 };
 
 export default defineConfig({

@@ -1,5 +1,7 @@
 import type {
   ArtifactRow,
+  AuthCaptureRow,
+  AuthProfileRow,
   EnvironmentRow,
   ProjectRow,
   RevisionRow,
@@ -10,6 +12,8 @@ import type {
 } from '@flowcheck/db';
 import {
   type ArtifactDto,
+  type AuthCaptureDto,
+  type AuthProfileDto,
   type EnvironmentDto,
   type EnvironmentSnapshot,
   effectiveAllowedOrigins,
@@ -23,6 +27,32 @@ import {
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const isoOrNull = (ms: number | null) => (ms === null ? null : iso(ms));
+
+export function authProfileDto(row: AuthProfileRow): AuthProfileDto {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    environmentId: row.environmentId,
+    name: row.name,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+  };
+}
+
+export function authCaptureDto(row: AuthCaptureRow): AuthCaptureDto {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    environmentId: row.environmentId,
+    profileName: row.profileName,
+    startPath: row.startPath,
+    status: row.status,
+    error: row.error,
+    authProfileId: row.authProfileId,
+    createdAt: iso(row.createdAt),
+    finishedAt: isoOrNull(row.finishedAt),
+  };
+}
 
 export function secretDto(row: SecretInfo): SecretDto {
   return { id: row.id, projectId: row.projectId, name: row.name, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) };

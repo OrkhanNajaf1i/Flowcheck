@@ -12,6 +12,7 @@ import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { Empty, ErrorState, Loading, Notice } from '@/components/ui/states';
 import { Switch } from '@/components/ui/switch';
+import { LoginSessions } from '@/features/auth/login-sessions';
 import { t } from '@/i18n';
 import { api } from '@/lib/api';
 import { applyServerErrors } from '@/lib/form-errors';
@@ -144,6 +145,7 @@ export function EnvironmentsPanel({ projectId, openNewSignal = 0 }: { projectId:
                   <dt className="text-muted-foreground">{t.environments.allowPrivateNetwork}</dt>
                   <dd>{env.allowPrivateNetwork ? t.common.yes : t.common.no}</dd>
                 </dl>
+                <LoginSessions environment={env} />
               </CardContent>
             </Card>
           ))}

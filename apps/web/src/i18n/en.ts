@@ -331,6 +331,38 @@ export const en = {
     inputDefault: 'default (optional)',
     inputRequired: 'required',
   },
+  auth: {
+    title: 'Login sessions',
+    intro:
+      'Log in once by hand; tests can then start already logged in. Each run gets a fresh browser with this session and does not change the saved session.',
+    create: 'Create login session',
+    none: 'No login session for this website yet.',
+    name: 'Session name',
+    namePlaceholder: 'Test user',
+    startPath: 'Open first',
+    startPathHint: 'The page where you log in, e.g. /login',
+    start: 'Open browser',
+    status: {
+      starting: 'Opening a browser window on this computer…',
+      waiting_for_login: 'A browser window is open. Log in there with a test account, then come back and press "Save session".',
+      saving: 'Saving the session…',
+      saved: 'Session saved. Tests can now use it.',
+      failed: 'Could not create the session.',
+      cancelled: 'Cancelled — nothing was saved.',
+    },
+    save: 'Save session',
+    stopped: 'The browser was closed or stopped.',
+    notStarted: 'Still waiting for the runner — is FlowCheck started with "pnpm start"?',
+    limits:
+      'Saved: cookies, localStorage and IndexedDB. Not saved: sessionStorage, passkeys/WebAuthn. When the session expires on the site, tests fail at the first page that needs a login — create the session again.',
+    deleteConfirm: (name: string) =>
+      `Delete the login session "${name}"? Tests that use it will not start until another session is chosen.`,
+    pick: 'Login session',
+    pickNone: 'None — start logged out',
+    pickHint: 'Runs start already logged in. The session belongs to one website; runs on other websites are refused.',
+    forWebsite: (site: string) => `for ${site}`,
+    runOnlyOn: (site: string) => `This test uses a login session, so it can only run on "${site}".`,
+  },
   secrets: {
     tab: 'Secrets',
     intro:

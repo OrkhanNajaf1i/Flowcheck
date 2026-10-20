@@ -180,3 +180,54 @@ export const secrets = sqliteTable(
   },
   (t) => [uniqueIndex('secrets_project_name_uq').on(t.projectId, t.name)],
 );
+
+/** Saved login session (Playwright storage state), encrypted, bound to one environment. */
+export const authProfiles = sqliteTable(
+  'auth_profiles',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    environmentId: text('environment_id')
+      .notNull()
+      .references(() => environments.id),
+    name: text('name').notNull(),
+    /** Encrypted JSON of cookies, localStorage and IndexedDB (see secret-box.ts). */
+    encryptedStorageState: text('encrypted_storage_state').notNull(),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex('auth_profiles_env_name_uq').on(t.environmentId, t.name)],
+);
+
+export type AuthCaptureStatus = 'starting' | 'waiting_for_login' | 'saving' | 'saved' | 'failed' | 'cancelled';
+
+/**
+ * A login-session capture. The row is also the command channel to the runner: the runner claims
+ * "starting" rows, and save/cancel requests are timestamps it polls (no HTTP between processes).
+ */
+export const authCaptureSessions = sqliteTable(
+  'auth_capture_sessions',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    environmentId: text('environment_id')
+      .notNull()
+      .references(() => environments.id),
+    profileName: text('profile_name').notNull(),
+    /** Path opened first, relative to the environment's website address. */
+    startPath: text('start_path').notNull(),
+    status: text('status').$type<AuthCaptureStatus>().notNull(),
+    error: text('error'),
+    workerId: text('worker_id'),
+    heartbeatAt: integer('heartbeat_at'),
+    saveRequestedAt: integer('save_requested_at'),
+    cancelRequestedAt: integer('cancel_requested_at'),
+    authProfileId: text('auth_profile_id'),
+    createdAt: integer('created_at').notNull(),
+    finishedAt: integer('finished_at'),
+  },
+  (t) => [index('auth_capture_status_idx').on(t.status, t.createdAt)],
+);

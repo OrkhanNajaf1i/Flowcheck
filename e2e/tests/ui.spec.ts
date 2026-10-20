@@ -349,3 +349,44 @@ test('secrets are added in the project and picked in a "Type text" step without 
   await expect(step.getByLabel('Text to type')).toHaveValue('{{secrets.testPassword}}');
   await expect(step.getByText('looks like a password typed as plain text')).toHaveCount(0);
 });
+
+test('a login session is created from the website card, picked in the editor and used by the run', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(
+    projectId,
+    definition([
+      { id: 'open', name: 'Open account', type: 'navigate', url: '/account' },
+      {
+        id: 'who',
+        name: 'Signed in',
+        type: 'assertText',
+        locator: { kind: 'testId', value: 'account-status' },
+        expected: 'Signed in as qa',
+        mode: 'exact',
+        timeoutMs: 3000,
+      },
+    ]),
+  );
+
+  await page.goto(`${SERVER}/projects/${projectId}`);
+  await page.getByRole('tab', { name: /Websites/ }).click();
+  await page.getByRole('button', { name: 'Create login session' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Session name').fill('QA user');
+  await dialog.getByLabel('Open first').fill('/auto-login/qa');
+  await dialog.getByRole('button', { name: 'Open browser' }).click();
+  await expect(dialog.getByTestId('capture-status')).toContainText('A browser window is open', { timeout: 20_000 });
+  await dialog.getByRole('button', { name: 'Save session' }).click();
+  await expect(dialog.getByTestId('capture-status')).toContainText('Session saved', { timeout: 20_000 });
+  await dialog.getByRole('button', { name: 'Close' }).first().click();
+  await expect(page.getByText('QA user')).toBeVisible();
+
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await page.getByLabel('Login session').selectOption({ label: 'QA user — for Local demo' });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await expect(page.getByText('This test uses a login session')).toBeVisible();
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});

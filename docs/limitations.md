@@ -21,11 +21,12 @@ SaaS/cloud browsers, multiple users/roles, AI test generation, selector self-hea
 
 ## Current implementation state
 
-Phase 1 is implemented. Not available yet: web UI, recorder, network checks on UI actions, output variables, secrets, auth profiles, cleanup on cancel, artifact retention, bootstrap token. See [STATUS.md](STATUS.md) for the exact list.
+Phases 1–3 are implemented. Not available yet: recorder, cleanup on cancel, artifact retention, bootstrap token. See [STATUS.md](STATUS.md) for the exact list.
 
 ## Known technical limits
 
 - DNS TOCTOU between the SSRF check and the real connection (see [security.md](security.md)).
+- Login sessions keep cookies, localStorage and IndexedDB only — not sessionStorage, passkeys/WebAuthn or server-side token refresh. An expired session shows up as a failing step on the first page that needs a login; FlowCheck does not claim the cause.
 - Templates have no escape syntax: a literal `{{` cannot be written in a templated field.
 - Browser context isolation does not clean server-side data; only explicit cleanup steps do.
 - The duplicate-request check for network checks (phase 3) uses a 500 ms window and cannot exclude all later duplicates.

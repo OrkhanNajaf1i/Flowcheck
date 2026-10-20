@@ -2,24 +2,29 @@ import { createReadStream, rmSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import {
   archiveTestCase,
+  createAuthCapture,
   createEnvironment,
   createProject,
   createRevision,
   createRun,
   createSecret,
   createTestCase,
+  deleteAuthProfile,
   deleteProject,
   deleteSecret,
   duplicateTestCase,
   type FlowDb,
   getArtifact,
   getArtifacts,
+  getAuthCapture,
+  getAuthProfile,
   getEnvironment,
   getProject,
   getRevision,
   getRun,
   getStepRuns,
   getTestCase,
+  listAuthProfiles,
   listEnvironments,
   listProjects,
   listRevisions,
@@ -29,12 +34,15 @@ import {
   loadMasterKey,
   missingSecrets,
   replaceSecretValue,
+  requestAuthCaptureCancel,
+  requestAuthCaptureSave,
   requestCancel,
   updateEnvironment,
   updateProject,
   updateTestCase,
 } from '@flowcheck/db';
 import {
+  createAuthCaptureSchema,
   createEnvironmentSchema,
   createProjectSchema,
   createRevisionSchema,
@@ -54,7 +62,17 @@ import {
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { ServerConfig } from './config.ts';
-import { environmentDto, environmentSnapshot, projectDto, revisionDto, runDto, secretDto, testCaseDto } from './dto.ts';
+import {
+  authCaptureDto,
+  authProfileDto,
+  environmentDto,
+  environmentSnapshot,
+  projectDto,
+  revisionDto,
+  runDto,
+  secretDto,
+  testCaseDto,
+} from './dto.ts';
 import { HttpError, validationError } from './errors.ts';
 
 const idParam = <K extends string>(name: K) => z.object({ [name]: z.string().min(1).max(64) } as Record<K, z.ZodString>);
@@ -74,6 +92,38 @@ export function apiRoutes(db: FlowDb, config: ServerConfig): FastifyPluginAsyncZ
   return async (app) => {
     const master = loadMasterKey(config.dataDir);
     if (master.warning) app.log.warn(master.warning);
+
+    // ---- Login sessions: captured in a visible browser by the runner, stored encrypted ----
+    app.get('/projects/:projectId/auth-profiles', { schema: { params: idParam('projectId') } }, async (req) => {
+      getProject(db, req.params.projectId);
+      return listAuthProfiles(db, req.params.projectId).map(authProfileDto);
+    });
+    app.delete('/auth-profiles/:profileId', { schema: { params: idParam('profileId') } }, async (req, reply) => {
+      deleteAuthProfile(db, req.params.profileId);
+      return reply.code(204).send();
+    });
+    app.post(
+      '/projects/:projectId/auth-captures',
+      { schema: { params: idParam('projectId'), body: createAuthCaptureSchema } },
+      async (req, reply) => {
+        const capture = createAuthCapture(db, {
+          projectId: req.params.projectId,
+          environmentId: req.body.environmentId,
+          profileName: req.body.name,
+          startPath: req.body.startPath,
+        });
+        return reply.code(202).send(authCaptureDto(capture));
+      },
+    );
+    app.get('/auth-captures/:captureId', { schema: { params: idParam('captureId') } }, async (req) =>
+      authCaptureDto(getAuthCapture(db, req.params.captureId)),
+    );
+    app.post('/auth-captures/:captureId/save', { schema: { params: idParam('captureId') } }, async (req, reply) =>
+      reply.code(202).send(authCaptureDto(requestAuthCaptureSave(db, req.params.captureId))),
+    );
+    app.post('/auth-captures/:captureId/cancel', { schema: { params: idParam('captureId') } }, async (req, reply) =>
+      reply.code(202).send(authCaptureDto(requestAuthCaptureCancel(db, req.params.captureId))),
+    );
 
     // ---- Secrets: values go in, never come out ----
     app.get('/projects/:projectId/secrets', { schema: { params: idParam('projectId') } }, async (req) =>
@@ -238,6 +288,17 @@ export function apiRoutes(db: FlowDb, config: ServerConfig): FastifyPluginAsyncZ
         throw new HttpError('NOT_FOUND', `Environment ${environment.id} does not belong to this project`);
       }
       if (!environment.enabled) throw new HttpError('ENVIRONMENT_DISABLED', `Environment "${environment.name}" is disabled`);
+      // A login session belongs to one environment and is never used silently elsewhere.
+      if (parsed.definition.authProfileId) {
+        const profile = getAuthProfile(db, parsed.definition.authProfileId);
+        if (profile.environmentId !== environment.id) {
+          throw new HttpError(
+            'AUTH_PROFILE_ENVIRONMENT_MISMATCH',
+            `The login session "${profile.name}" belongs to another website. Choose that website or another login session.`,
+            { authProfileId: profile.id, environmentId: profile.environmentId },
+          );
+        }
+      }
 
       // Snapshot at creation: the run executes against what the tester saw when starting it.
       const run = createRun(db, {

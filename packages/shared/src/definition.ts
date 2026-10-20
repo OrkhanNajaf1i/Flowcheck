@@ -389,6 +389,8 @@ export const testDefinitionV1Schema = z
     cleanupSteps: z.array(stepSchema).max(100),
     defaultTimeoutMs: stepTimeout.optional(),
     runTimeoutMs: runTimeout.optional(),
+    /** Saved login session loaded into every run; it must belong to the run's environment. */
+    authProfileId: z.string().min(1).max(64).optional(),
   })
   .superRefine((def, ctx) => {
     const seenInputs = new Set<string>();

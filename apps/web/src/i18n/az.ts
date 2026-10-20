@@ -333,6 +333,38 @@ export const az: Dict = {
     inputDefault: 'standart dəyər (istəyə bağlı)',
     inputRequired: 'məcburi',
   },
+  auth: {
+    title: 'Login sessiyaları',
+    intro:
+      'Bir dəfə əl ilə login olun — sonra testlər artıq login olmuş vəziyyətdə başlaya bilər. Hər run bu sessiya ilə yeni brauzerdə başlayır və saxlanmış sessiyanı dəyişmir.',
+    create: 'Login sessiyası yarat',
+    none: 'Bu sayt üçün hələ login sessiyası yoxdur.',
+    name: 'Sessiyanın adı',
+    namePlaceholder: 'Test istifadəçisi',
+    startPath: 'Əvvəlcə açılsın',
+    startPathHint: 'Login olduğunuz səhifə, məsələn /login',
+    start: 'Brauzeri aç',
+    status: {
+      starting: 'Bu kompüterdə brauzer pəncərəsi açılır…',
+      waiting_for_login: 'Brauzer pəncərəsi açıqdır. Orada test hesabı ilə login olun, sonra bura qayıdıb "Sessiyanı yadda saxla" basın.',
+      saving: 'Sessiya saxlanılır…',
+      saved: 'Sessiya saxlanıldı. Testlər artıq onu istifadə edə bilər.',
+      failed: 'Sessiya yaradıla bilmədi.',
+      cancelled: 'Ləğv edildi — heç nə saxlanılmadı.',
+    },
+    save: 'Sessiyanı yadda saxla',
+    stopped: 'Brauzer bağlandı və ya dayandı.',
+    notStarted: 'Hələ runner gözlənilir — FlowCheck "pnpm start" ilə işə salınıb?',
+    limits:
+      'Saxlanılır: cookie-lər, localStorage və IndexedDB. Saxlanılmır: sessionStorage, passkey/WebAuthn. Saytda sessiyanın vaxtı bitəndə testlər login tələb edən ilk səhifədə keçməyəcək — sessiyanı yenidən yaradın.',
+    deleteConfirm: (name: string) =>
+      `"${name}" login sessiyası silinsin? Onu istifadə edən testlər başqa sessiya seçilənə qədər başlamayacaq.`,
+    pick: 'Login sessiyası',
+    pickNone: 'Yoxdur — login olmadan başla',
+    pickHint: 'Run-lar artıq login olmuş vəziyyətdə başlayır. Sessiya bir sayta aiddir; başqa saytlarda run rədd edilir.',
+    forWebsite: (site: string) => `${site} üçün`,
+    runOnlyOn: (site: string) => `Bu test login sessiyası istifadə edir, ona görə yalnız "${site}" saytında işləyə bilər.`,
+  },
   secrets: {
     tab: 'Gizli dəyərlər',
     intro:

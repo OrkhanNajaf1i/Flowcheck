@@ -69,7 +69,7 @@ HTTP 4xx/5xx is not a failure by itself — a test expecting `403` passes when i
 - **SSRF protection**: only allowlisted origins; resolved IPs are checked; cloud metadata addresses are always blocked; private/loopback targets need "Allow private network". There is a residual DNS TOCTOU risk — see [docs/security.md](docs/security.md).
 - **Secrets**: passwords and tokens go under *Project → Secrets*. They are stored encrypted, never shown again, and replaced by `[REDACTED]` in reports. Use them as `{{secrets.name}}` in "Type text" values and API headers (the "Use a secret" picker inserts it). If the master key (`FLOWCHECK_MASTER_KEY` or `data/master.key`) is lost, secrets cannot be recovered — enter them again.
 - **Screenshots** of failed UI steps may contain personal data; they are not redacted.
-- **Login-protected pages** are not supported yet (auth profiles come in phase 3). You can test login itself with *Type into field* + *Click* steps.
+- **Login-protected pages**: on the website card press **Create login session** → a browser window opens on this computer → log in there with a test account → back in FlowCheck press **Save session**. In the test editor choose the session under *Login session*; runs then start already logged in, only on that website. Saved: cookies, localStorage, IndexedDB (encrypted). Not saved: sessionStorage, passkeys/WebAuthn. Runs never update the saved session — when it expires on the site, create it again. While the login browser is open, no test runs.
 
 ## REST API
 

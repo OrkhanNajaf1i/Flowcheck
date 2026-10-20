@@ -95,13 +95,16 @@ Acceptance criteria now covered end-to-end (`e2e/tests/network.spec.ts`, repeate
 
 Encrypted secrets per project (API + "Secrets" tab), `{{secrets.name}}` in fill values and headers with a picker in the editor, plain-password warning, runs refuse to start without required secrets, central redaction of all step evidence and error messages. Evidence: db (8 new: crypto round-trip, owner binding, tampering, key sources, repository), shared (2), server (2), e2e (2, incl. criterion 17 with a secret that ends up in the page URL) and a UI test.
 
+## Phase 3 (part 3): auth profiles — done
+
+"Create login session" on a website card: the runner opens a visible browser (target guard active, 15 min limit, closing the window = `cancelled`), the user logs in by hand and presses "Save session"; the storage state (cookies, localStorage, IndexedDB) is stored encrypted, bound to that website. The capture holds the execution lock; its row is the server → runner command channel (save/cancel requests), orphaned captures fail after 60 s. Tests pick a session in the editor; the run dialog offers only its website, the server refuses others (`AUTH_PROFILE_ENVIRONMENT_MISMATCH`); each run loads the state into a fresh context and never writes it back. Evidence: db (capture lifecycle, lock, orphan handling, upsert, encryption), demo login (`/login`, `/account`), e2e (`auth.spec.ts`: capture → save → logged-in run, cancel, mismatch) and a UI test.
+
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.
-- **Phase 3 (rest):** auth profiles (saved login sessions).
 - **Phase 4:** recorder.
 - **Phase 5:** bootstrap token, artifact retention/quota, remaining acceptance criteria (1, 2, 4–9, 12, 13, 17, 21, 24, 29, 31) and e2e for real process restart and redirect bypass.
 
 ## Next concrete task
 
-Auth profiles: capture a login session in a visible browser, store it encrypted, load it into new runs (cookies, localStorage, IndexedDB), bound to one environment.
+Recorder (phase 4): record clicks and typing in a visible browser and turn them into editable steps with the most stable locator per element.

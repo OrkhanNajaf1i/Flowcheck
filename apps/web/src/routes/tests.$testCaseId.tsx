@@ -11,6 +11,7 @@ import { Input, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { ErrorState, Loading, Notice } from '@/components/ui/states';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LoginSessionPicker } from '@/features/auth/login-sessions';
 import { type EditorForm, issueKey, PHASES, toDefinition, toForm } from '@/features/editor/definition-form';
 import { EditorContext } from '@/features/editor/editor-context';
 import { InputsSection } from '@/features/editor/inputs-section';
@@ -211,6 +212,11 @@ function Editor({
                 <Field label={`${t.common.description} (${t.common.optional})`} htmlFor="test-description">
                   <Textarea id="test-description" rows={2} className="min-h-0 font-sans text-sm" {...form.register('description')} />
                 </Field>
+                <LoginSessionPicker
+                  projectId={testCase.projectId}
+                  value={form.watch('authProfileId')}
+                  onChange={(id) => form.setValue('authProfileId', id, { shouldDirty: true })}
+                />
               </CardContent>
             </Card>
 
@@ -299,7 +305,13 @@ function Editor({
           </aside>
         </form>
         {running ? (
-          <RunDialog projectId={testCase.projectId} testCaseId={testCase.id} inputs={savedInputs} onClose={() => setRunning(false)} />
+          <RunDialog
+            authProfileId={definition.authProfileId}
+            projectId={testCase.projectId}
+            testCaseId={testCase.id}
+            inputs={savedInputs}
+            onClose={() => setRunning(false)}
+          />
         ) : null}
       </FormProvider>
     </EditorContext.Provider>

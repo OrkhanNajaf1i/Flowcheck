@@ -42,9 +42,14 @@ const PAGES = {
   '/order': 'order.html',
   '/form': 'form.html',
   '/done': 'done.html',
+  '/login': 'login.html',
+  '/account': 'account.html',
 } as const;
 
 const SESSION_COOKIE = 'demo_session';
+const AUTH_COOKIE = 'demo_auth';
+/** The only accepted demo password (any user name). */
+export const DEMO_PASSWORD = 'demo-password';
 
 export function buildDemoApp(options: { bugMode?: BugMode } = {}): FastifyInstance & { bugMode: () => BugMode } {
   let bugMode: BugMode = options.bugMode ?? 'success';
@@ -125,6 +130,31 @@ export function buildDemoApp(options: { bugMode?: BugMode } = {}): FastifyInstan
   });
 
   app.get('/api/admin-only', async (_req, reply) => reply.code(403).send({ error: 'forbidden' }));
+
+  // ---- Login (cookie session), used for login-session tests ----
+  const logins = new Map<string, string>();
+  const startLogin = (reply: FastifyReply, username: string) => {
+    const token = randomBytes(16).toString('hex');
+    logins.set(token, username);
+    reply.setCookie(AUTH_COOKIE, token, { path: '/', httpOnly: true, sameSite: 'lax' });
+  };
+  app.post<{ Body: { username?: unknown; password?: unknown } }>('/api/login', async (req, reply) => {
+    const { username, password } = req.body ?? {};
+    if (typeof username !== 'string' || !username || password !== DEMO_PASSWORD) {
+      return reply.code(401).send({ error: 'invalid_credentials' });
+    }
+    startLogin(reply, username);
+    return { username };
+  });
+  app.get('/api/me', async (req, reply) => {
+    const username = logins.get(req.cookies[AUTH_COOKIE] ?? '');
+    return username ? { username } : reply.code(401).send({ error: 'not_signed_in' });
+  });
+  // Test helper: lets an automated capture browser "log in" without a human.
+  app.get<{ Params: { user: string } }>('/auto-login/:user', async (req, reply) => {
+    startLogin(reply, req.params.user);
+    return reply.redirect('/account');
+  });
 
   // Demo control endpoints, loopback only.
   app.get('/__demo/mode', async () => ({ mode: bugMode }));

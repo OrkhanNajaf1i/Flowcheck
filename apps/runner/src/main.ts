@@ -1,5 +1,6 @@
-import { claimNextRun, interruptOrphanedRuns, openDatabase } from '@flowcheck/db';
+import { claimAuthCapture, claimNextRun, failOrphanedAuthCaptures, interruptOrphanedRuns, openDatabase } from '@flowcheck/db';
 import pino from 'pino';
+import { runAuthCapture } from './auth-capture.ts';
 import { loadConfig } from './config.ts';
 import { executeRun } from './execute-run.ts';
 import { isWorkerAlive, newWorkerId } from './worker-id.ts';
@@ -30,6 +31,16 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 while (!shutdown.signal.aborted) {
   try {
     interruptOrphanedRuns(handle.db, alive);
+    failOrphanedAuthCaptures(handle.db, alive);
+    // A login-session capture holds the execution lock, so runs wait until it is finished.
+    const capture = claimAuthCapture(handle.db, workerId);
+    if (capture) {
+      log.info({ captureId: capture.id }, 'opening browser for login session capture');
+      busy = runAuthCapture(capture, { db: handle.db, config, log, shutdown: shutdown.signal });
+      await busy;
+      busy = null;
+      continue;
+    }
     const run = claimNextRun(handle.db, workerId);
     if (run) {
       log.info({ runId: run.id }, 'claimed run');

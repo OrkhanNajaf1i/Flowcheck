@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Account - Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:520px;margin:2rem auto;padding:0 1rem}</style>
+</head>
+<body>
+  <h1>Your account</h1>
+  <p data-testid="account-status">Loading...</p>
+  <script type="module">
+    const status = document.querySelector('[data-testid="account-status"]');
+    const res = await fetch('/api/me');
+    status.textContent = res.ok ? `Signed in as ${(await res.json()).username}` : 'Please sign in';
+  </script>
+</body>
+</html>

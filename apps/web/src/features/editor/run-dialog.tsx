@@ -13,11 +13,14 @@ import { ApiError, api } from '@/lib/api';
 
 /** Starts a run of the saved revision after an explicit confirmation that real requests are sent. */
 export function RunDialog({
+  authProfileId,
   projectId,
   testCaseId,
   inputs,
   onClose,
 }: {
+  /** Saved login session of the revision being run: only its website is offered. */
+  authProfileId?: string | undefined;
   projectId: string;
   testCaseId: string;
   inputs: InputDefinition[];
@@ -25,7 +28,14 @@ export function RunDialog({
 }) {
   const navigate = useNavigate();
   const environments = useQuery({ queryKey: ['environments', projectId], queryFn: () => api.environments(projectId) });
-  const enabled = (environments.data ?? []).filter((env) => env.enabled);
+  const profiles = useQuery({
+    queryKey: ['authProfiles', projectId],
+    queryFn: () => api.authProfiles(projectId),
+    enabled: !!authProfileId,
+  });
+  const profileEnvironmentId = profiles.data?.find((p) => p.id === authProfileId)?.environmentId;
+  const enabled = (environments.data ?? []).filter((env) => env.enabled && (!profileEnvironmentId || env.id === profileEnvironmentId));
+  const onlySite = profileEnvironmentId ? environments.data?.find((env) => env.id === profileEnvironmentId)?.name : undefined;
   const [environmentId, setEnvironmentId] = useState('');
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(inputs.map((input) => [input.name, input.default === undefined ? '' : String(input.default)])),
@@ -62,6 +72,7 @@ export function RunDialog({
               start.mutate();
             }}
           >
+            {onlySite ? <Notice>{t.auth.runOnlyOn(onlySite)}</Notice> : null}
             <Field label={t.run.environment} htmlFor="run-env">
               <Select id="run-env" value={environmentId || enabled[0]?.id} onChange={(e) => setEnvironmentId(e.target.value)}>
                 {enabled.map((env) => (

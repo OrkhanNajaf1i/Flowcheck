@@ -225,3 +225,43 @@ export interface SecretDto {
   createdAt: string;
   updatedAt: string;
 }
+
+// ---- Login sessions (auth profiles) ----
+
+export const createAuthCaptureSchema = z.strictObject({
+  environmentId: id,
+  name,
+  /** Page opened first, e.g. /login. */
+  startPath: z
+    .string()
+    .max(500)
+    .regex(/^\/(?!\/)/, 'Must start with a single "/", e.g. /login')
+    .default('/'),
+});
+export type CreateAuthCaptureBody = z.input<typeof createAuthCaptureSchema>;
+
+export const AUTH_CAPTURE_STATUSES = ['starting', 'waiting_for_login', 'saving', 'saved', 'failed', 'cancelled'] as const;
+export type AuthCaptureStatus = (typeof AUTH_CAPTURE_STATUSES)[number];
+
+export interface AuthCaptureDto {
+  id: string;
+  projectId: string;
+  environmentId: string;
+  profileName: string;
+  startPath: string;
+  status: AuthCaptureStatus;
+  error: string | null;
+  authProfileId: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+/** A saved login session; the storage state itself is never returned. */
+export interface AuthProfileDto {
+  id: string;
+  projectId: string;
+  environmentId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}

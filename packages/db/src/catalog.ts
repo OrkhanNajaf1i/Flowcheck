@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, isNull, max } from 'drizzle-orm';
 import type { FlowDb } from './client.ts';
 import { notFound, RepoError } from './errors.ts';
 import { newId } from './ids.ts';
-import { environments, projects, secrets, testCases, testRevisions, testRuns } from './schema.ts';
+import { authCaptureSessions, authProfiles, environments, projects, secrets, testCases, testRevisions, testRuns } from './schema.ts';
 
 export type ProjectRow = typeof projects.$inferSelect;
 export type EnvironmentRow = typeof environments.$inferSelect;
@@ -80,6 +80,16 @@ export function deleteProject(db: FlowDb, id: string): void {
         tx.delete(testRevisions).where(inArray(testRevisions.testCaseId, caseIds)).run();
         tx.delete(testCases).where(eq(testCases.projectId, id)).run();
       }
+      const activeCapture = tx
+        .select({ id: authCaptureSessions.id })
+        .from(authCaptureSessions)
+        .where(and(eq(authCaptureSessions.projectId, id), inArray(authCaptureSessions.status, ['starting', 'waiting_for_login', 'saving'])))
+        .get();
+      if (activeCapture) {
+        throw new RepoError('PROJECT_HAS_ACTIVE_RUNS', 'A login session is being created for this project. Finish or cancel it first.');
+      }
+      tx.delete(authCaptureSessions).where(eq(authCaptureSessions.projectId, id)).run();
+      tx.delete(authProfiles).where(eq(authProfiles.projectId, id)).run();
       tx.delete(secrets).where(eq(secrets.projectId, id)).run();
       tx.delete(environments).where(eq(environments.projectId, id)).run();
       tx.delete(projects).where(eq(projects.id, id)).run();
