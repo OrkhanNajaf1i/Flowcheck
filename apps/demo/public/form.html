@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sign up - Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:520px;margin:2rem auto;padding:0 1rem}form{display:grid;gap:.75rem}[hidden]{display:none}</style>
+</head>
+<body>
+  <h1>Newsletter sign-up</h1>
+  <form id="signup">
+    <label for="name">Name</label>
+    <input id="name" name="name" value="Guest">
+    <label for="country">Country</label>
+    <select id="country" name="country">
+      <option value="">Choose…</option>
+      <option value="az">Azerbaijan</option>
+      <option value="tr">Türkiye</option>
+    </select>
+    <div><input type="checkbox" id="terms"> <label for="terms">I agree to the terms</label></div>
+    <p role="alert" data-testid="form-error" hidden>Please choose a country</p>
+    <button type="submit" id="submit" disabled>Sign up</button>
+  </form>
+  <script type="module">
+    const form = document.getElementById('signup');
+    const terms = document.getElementById('terms');
+    const submit = document.getElementById('submit');
+    const error = document.querySelector('[data-testid="form-error"]');
+    // The button is only enabled while the terms are accepted.
+    terms.addEventListener('change', () => { submit.disabled = !terms.checked; });
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!terms.checked) return;
+      const country = document.getElementById('country').value;
+      if (!country) { error.hidden = false; return; }
+      const name = document.getElementById('name').value;
+      location.href = `/done?country=${encodeURIComponent(country)}&name=${encodeURIComponent(name)}`;
+    });
+  </script>
+</body>
+</html>

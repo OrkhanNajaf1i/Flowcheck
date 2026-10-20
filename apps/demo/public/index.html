@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem}.product{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ddd;padding:.75rem 0}</style>
+</head>
+<body>
+  <header>
+    <h1>Demo Shop</h1>
+    <nav><a href="/cart" data-testid="cart-link">Cart (<span data-testid="cart-count">0</span>)</a></nav>
+  </header>
+  <main>
+    <h2>Products</h2>
+    <ul id="products" data-testid="product-list" style="list-style:none;padding:0"></ul>
+    <p role="status" data-testid="add-status" aria-live="polite"></p>
+  </main>
+  <script type="module">
+    const list = document.getElementById('products');
+    const status = document.querySelector('[data-testid="add-status"]');
+    const count = document.querySelector('[data-testid="cart-count"]');
+    async function refreshCount() {
+      const cart = await (await fetch('/api/cart')).json();
+      count.textContent = String(cart.items.reduce((n, i) => n + i.quantity, 0));
+    }
+    const products = await (await fetch('/api/products')).json();
+    for (const p of products) {
+      const li = document.createElement('li');
+      li.className = 'product';
+      li.dataset.testid = `product-${p.id}`;
+      const label = document.createElement('span');
+      label.textContent = `${p.name} - $${p.price}`;
+      // Every button has the same accessible name on purpose (ambiguous role locator).
+      const button = document.createElement('button');
+      button.textContent = 'Add to cart';
+      button.dataset.testid = `add-to-cart-${p.id}`;
+      button.addEventListener('click', async () => {
+        const res = await fetch('/api/cart/items', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ productId: p.id, quantity: 1 }),
+        });
+        status.textContent = res.ok ? `${p.name} added to cart` : 'Could not add to cart';
+        await refreshCount();
+      });
+      li.append(label, button);
+      list.append(li);
+    }
+    await refreshCount();
+  </script>
+</body>
+</html>

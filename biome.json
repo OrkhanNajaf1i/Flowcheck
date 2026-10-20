@@ -1,0 +1,87 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/migrations/meta",
+      "!**/node_modules",
+      "!**/test-results",
+      "!**/playwright-report",
+      "!**/routeTree.gen.ts",
+      "!**/dist"
+    ]
+  },
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noUndeclaredEnvVars": {
+          "level": "error",
+          "options": {
+            "allowedEnvVars": ["FLOWCHECK_.*", "DEMO_.*"]
+          }
+        }
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["apps/server/**", "apps/web/**", "apps/demo/**", "packages/shared/**", "packages/db/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "playwright": "Only apps/runner and packages/test-engine may use Playwright (PROJECT_RULES §3.11).",
+                  "@flowcheck/test-engine": "Only apps/runner may use the test engine (PROJECT_RULES §3.11)."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/shared/**", "packages/test-engine/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "fastify": "Engine and shared code must not depend on Fastify (PROJECT_RULES §3.11).",
+                  "@flowcheck/db": "Engine and shared code must not depend on the database (PROJECT_RULES §3.11).",
+                  "better-sqlite3": "Engine and shared code must not depend on the database (PROJECT_RULES §3.11)."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  }
+}

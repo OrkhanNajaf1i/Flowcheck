@@ -1,0 +1,24 @@
+{
+  "name": "@flowcheck/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --watch src/main.ts",
+    "start": "node --env-file-if-exists=../../.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/helmet": "13.2.0",
+    "@fastify/static": "10.1.6",
+    "@flowcheck/db": "workspace:*",
+    "@flowcheck/shared": "workspace:*",
+    "fastify": "5.12.7",
+    "fastify-type-provider-zod": "7.0.0",
+    "pino": "10.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "vitest": "5.0.5"
+  }
+}
