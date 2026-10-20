@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.turbo/
+coverage/
+test-results/
+playwright-report/
+# Runtime data: SQLite DB, artifacts, master key, kdf salt, bootstrap token
+data/
+*.key
+.env
+.env.*
+!.env.example
