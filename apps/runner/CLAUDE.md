@@ -1,6 +1,12 @@
 # apps/runner — queue worker
 
-Single worker process: claims queued runs from SQLite, executes them with Playwright via `@flowcheck/test-engine`, writes step results and artifacts. Later phases: recorder and auth capture (commands via a `runner_commands` table — the runner never calls the server over HTTP).
+Single worker process: claims queued runs from SQLite, executes them with Playwright via `@flowcheck/test-engine`, writes step results and artifacts. Also runs login-session captures (`auth-capture.ts`) and recordings (`recorder.ts` + the in-page `recorder-page.js`). Their own DB rows are the command channel (save/cancel/stop timestamps) — the runner never calls the server over HTTP.
+
+## Recorder
+- Page events are untrusted: validate with `pageEventSchema`, ignore events from other pages; frames only report `iframe`.
+- The page script only reports trusted (`isTrusted`) events and never sends password values.
+- Stop: flush pending typing in the page, then finish. Window closed → `stopped` + `browserClosed` notice (draft kept). Runner gone → `failOrphanedRecordings` marks `failed`, events stay.
+- `FLOWCHECK_RECORDER_HEADLESS=1` and `FLOWCHECK_RECORDER_DEBUG_PORT` are test-only (e2e drives the recorder browser over CDP).
 Spec: PROJECT_RULES §3.5, §13, §16.
 
 ## Rules

@@ -4,6 +4,7 @@ import type {
   ErrorCode,
   FailureSummary,
   InputValue,
+  RecordedEvent,
   RunStatus,
   StepPhase,
   StepStatus,
@@ -230,4 +231,57 @@ export const authCaptureSessions = sqliteTable(
     finishedAt: integer('finished_at'),
   },
   (t) => [index('auth_capture_status_idx').on(t.status, t.createdAt)],
+);
+
+export type RecordingStatus = 'starting' | 'recording' | 'stopping' | 'stopped' | 'failed';
+
+/**
+ * A recorder session (PROJECT_RULES §8). Like a capture, the row is the command channel to the
+ * runner: the runner claims "starting" rows and polls `stopRequestedAt`. Draft steps are not
+ * stored; they are derived from the events, so there is one source of truth.
+ */
+export const recordingSessions = sqliteTable(
+  'recording_sessions',
+  {
+    id: text('id').primaryKey(),
+    projectId: text('project_id')
+      .notNull()
+      .references(() => projects.id),
+    environmentId: text('environment_id')
+      .notNull()
+      .references(() => environments.id),
+    testCaseId: text('test_case_id'),
+    startPath: text('start_path').notNull(),
+    status: text('status').$type<RecordingStatus>().notNull(),
+    error: text('error'),
+    workerId: text('worker_id'),
+    heartbeatAt: integer('heartbeat_at'),
+    stopRequestedAt: integer('stop_requested_at'),
+    lastSequence: integer('last_sequence').notNull().default(0),
+    createdAt: integer('created_at').notNull(),
+    finishedAt: integer('finished_at'),
+  },
+  (t) => [index('recording_status_idx').on(t.status, t.createdAt)],
+);
+
+/**
+ * Recorded events in order. `eventId` and `sequence` are assigned on first receipt in one
+ * transaction; the page's `clientEventId` makes a re-sent event a duplicate, not a second step.
+ */
+export const recordingEvents = sqliteTable(
+  'recording_events',
+  {
+    eventId: text('event_id').primaryKey(),
+    sessionId: text('session_id')
+      .notNull()
+      .references(() => recordingSessions.id, { onDelete: 'cascade' }),
+    clientEventId: text('client_event_id'),
+    sequence: integer('sequence').notNull(),
+    payload: text('payload', { mode: 'json' }).$type<RecordedEvent>().notNull(),
+    receivedAt: integer('received_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('recording_events_seq_uq').on(t.sessionId, t.sequence),
+    uniqueIndex('recording_events_client_uq').on(t.sessionId, t.clientEventId),
+  ],
 );

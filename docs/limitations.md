@@ -21,7 +21,7 @@ SaaS/cloud browsers, multiple users/roles, AI test generation, selector self-hea
 
 ## Current implementation state
 
-Phases 1–3 are implemented. Not available yet: recorder, cleanup on cancel, artifact retention, bootstrap token. See [STATUS.md](STATUS.md) for the exact list.
+Phases 1–4 are implemented. Not available yet: cleanup on cancel, artifact retention, bootstrap token. See [STATUS.md](STATUS.md) for the exact list.
 
 ## Known technical limits
 
@@ -30,3 +30,4 @@ Phases 1–3 are implemented. Not available yet: recorder, cleanup on cancel, ar
 - Templates have no escape syntax: a literal `{{` cannot be written in a templated field.
 - Browser context isolation does not clean server-side data; only explicit cleanup steps do.
 - The duplicate-request check for network checks (phase 3) uses a 500 ms window and cannot exclude all later duplicates.
+- Recorder: locator uniqueness is checked in the page at the moment of the action; the run is the final check (`AMBIGUOUS_LOCATOR` / `LOCATOR_NOT_FOUND`). A navigation within 3 s after a recorded action is treated as its result; a URL typed into the address bar sooner is not recorded. Events created by page scripts (untrusted), e.g. a custom dropdown that sets a select's value in JavaScript, are not recorded.

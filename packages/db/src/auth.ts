@@ -3,6 +3,7 @@ import { getEnvironment } from './catalog.ts';
 import type { FlowDb } from './client.ts';
 import { notFound, RepoError } from './errors.ts';
 import { newId } from './ids.ts';
+import { acquireExecutionLock } from './lock.ts';
 import { HEARTBEAT_STALE_MS } from './runs.ts';
 import { type AuthCaptureStatus, authCaptureSessions, authProfiles, executionLock } from './schema.ts';
 import { decryptSecret, encryptSecret, type MasterKey } from './secret-box.ts';
@@ -101,23 +102,13 @@ export function createAuthCapture(
       const env = getEnvironment(tx as unknown as FlowDb, input.environmentId);
       if (env.projectId !== input.projectId) throw notFound('Environment', input.environmentId);
       if (!env.enabled) throw new RepoError('ENVIRONMENT_DISABLED', `Environment "${env.name}" is disabled`);
-      const lock = tx.select().from(executionLock).get();
-      if (lock) {
-        throw new RepoError(
-          'EXECUTION_LOCK_BUSY',
-          `FlowCheck is busy (${lock.holderKind === 'run' ? 'a test is running' : 'another login session is being created'}). Try again when it has finished.`,
-          {
-            holderKind: lock.holderKind,
-          },
-        );
-      }
-      const row = tx
+      const id = newId(now);
+      acquireExecutionLock(tx as unknown as FlowDb, 'auth_capture', id, now);
+      return tx
         .insert(authCaptureSessions)
-        .values({ id: newId(now), ...input, status: 'starting', createdAt: now })
+        .values({ id, ...input, status: 'starting', createdAt: now })
         .returning()
         .get();
-      tx.insert(executionLock).values({ id: 1, holderKind: 'auth_capture', holderId: row.id, acquiredAt: now, heartbeatAt: now }).run();
-      return row;
     },
     { behavior: 'immediate' },
   );

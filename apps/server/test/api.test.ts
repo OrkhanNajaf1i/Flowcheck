@@ -250,3 +250,31 @@ describe('secrets', () => {
     expect((await call('POST', `/api/test-cases/${tc.testCase.id}/runs`, { environmentId: env.id })).statusCode).toBe(202);
   });
 });
+
+describe('recordings', () => {
+  it('start with 202 and the lock, return a draft that opens the start page, and stop idempotently', async () => {
+    const { project, env, testCase } = await seed();
+    const started = await call('POST', `/api/projects/${project.id}/recordings`, {
+      environmentId: env.id,
+      startPath: '/form',
+      testCaseId: testCase.id,
+    });
+    expect(started.statusCode).toBe(202);
+    expect(started.json()).toMatchObject({ status: 'starting', eventCount: 0, steps: [{ type: 'navigate', url: '/form' }], warnings: [] });
+
+    const busy = await call('POST', `/api/projects/${project.id}/recordings`, { environmentId: env.id });
+    expect(busy.statusCode).toBe(409);
+    expect(busy.json().error.code).toBe('EXECUTION_LOCK_BUSY');
+
+    const id = started.json().id;
+    expect((await call('POST', `/api/recordings/${id}/stop`)).json().status).toBe('stopped');
+    expect((await call('POST', `/api/recordings/${id}/stop`)).json().status).toBe('stopped');
+    expect((await call('GET', `/api/recordings/${id}`)).json().steps).toHaveLength(1);
+  });
+
+  it('reject a start path that leaves the website', async () => {
+    const { project, env } = await seed();
+    const res = await call('POST', `/api/projects/${project.id}/recordings`, { environmentId: env.id, startPath: '//evil.example' });
+    expect(res.statusCode).toBe(400);
+  });
+});

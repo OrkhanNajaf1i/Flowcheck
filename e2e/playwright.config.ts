@@ -10,6 +10,7 @@ import { defineConfig } from '@playwright/test';
  */
 export const SERVER_PORT = 4410;
 export const DEMO_PORT = 4420;
+export const RECORDER_CDP_PORT = 4430;
 
 const dataDir = process.env.FLOWCHECK_E2E_DATA_DIR ?? mkdtempSync(join(tmpdir(), 'flowcheck-e2e-'));
 process.env.FLOWCHECK_E2E_DATA_DIR = dataDir;
@@ -20,6 +21,9 @@ const env = {
   DEMO_PORT: String(DEMO_PORT),
   // The login-session capture browser is visible for real users; tests run it headless.
   FLOWCHECK_CAPTURE_HEADLESS: '1',
+  // Same for the recorder; tests act in its browser over CDP like a tester would (real, trusted events).
+  FLOWCHECK_RECORDER_HEADLESS: '1',
+  FLOWCHECK_RECORDER_DEBUG_PORT: String(RECORDER_CDP_PORT),
 };
 
 export default defineConfig({

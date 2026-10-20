@@ -150,7 +150,7 @@ function Editor({
   };
 
   return (
-    <EditorContext.Provider value={{ projectId: testCase.projectId }}>
+    <EditorContext.Provider value={{ projectId: testCase.projectId, testCaseId: testCase.id }}>
       <FormProvider {...form}>
         <form className="grid gap-4 lg:grid-cols-[1fr_280px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} noValidate>
           <div className="flex flex-col gap-4">

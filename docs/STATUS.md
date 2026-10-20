@@ -99,12 +99,15 @@ Encrypted secrets per project (API + "Secrets" tab), `{{secrets.name}}` in fill 
 
 "Create login session" on a website card: the runner opens a visible browser (target guard active, 15 min limit, closing the window = `cancelled`), the user logs in by hand and presses "Save session"; the storage state (cookies, localStorage, IndexedDB) is stored encrypted, bound to that website. The capture holds the execution lock; its row is the server → runner command channel (save/cancel requests), orphaned captures fail after 60 s. Tests pick a session in the editor; the run dialog offers only its website, the server refuses others (`AUTH_PROFILE_ENVIRONMENT_MISMATCH`); each run loads the state into a fresh context and never writes it back. Evidence: db (capture lifecycle, lock, orphan handling, upsert, encryption), demo login (`/login`, `/account`), e2e (`auth.spec.ts`: capture → save → logged-in run, cancel, mismatch) and a UI test.
 
+## Phase 4: recorder — done
+
+"Record steps" in the editor's main steps: the runner opens a visible browser (target guard, service workers blocked, 30 min limit) with a recorder script and an in-page "Stop" overlay. Recorded: click, typing (one fill per field, last value; flushed before any other action and on stop), choose from list, tick/untick, Enter/Tab/Escape, direct navigation (not the result of a recorded action, 3 s window); SPA route changes do not add steps. Only trusted events are recorded; the runner validates every event with Zod and stores it with `sequence` assigned in the same transaction, duplicates by `clientEventId` are ignored. Locators: test id → data-* → role + Chromium's own accessible name → label → placeholder → name → alt/title → text → id, each checked to match exactly one element on the page; an ambiguous role/text is scoped to a container with a stable handle; otherwise a CSS path marked fragile. Password values are never sent (draft uses `{{secrets.password}}` + warning). Frames, shadow DOM, popups, file inputs, drag and drop, unsupported fields → warnings. The draft is derived from the events on every read and only becomes a revision when the tester saves. Evidence: shared (draft building, event schema), db (sequence, duplicates, lock, stop, orphans, project delete), server (start/stop/lock/start path), e2e (`recorder.spec.ts`, 8 tests: criteria 4, 24, 29, password, SPA, scoping, overlay Stop, UI flow).
+
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.
-- **Phase 4:** recorder.
-- **Phase 5:** bootstrap token, artifact retention/quota, remaining acceptance criteria (1, 2, 4–9, 12, 13, 17, 21, 24, 29, 31) and e2e for real process restart and redirect bypass.
+- **Phase 5:** bootstrap token, artifact retention/quota, remaining acceptance criteria (1, 2, 5–9, 12, 13, 17, 21, 31) and e2e for real process restart and redirect bypass.
 
 ## Next concrete task
 
-Recorder (phase 4): record clicks and typing in a visible browser and turn them into editable steps with the most stable locator per element.
+Phase 5: bootstrap token for the local server, artifact retention and quota.

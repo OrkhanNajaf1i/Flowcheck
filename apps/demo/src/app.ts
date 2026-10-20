@@ -44,6 +44,8 @@ const PAGES = {
   '/done': 'done.html',
   '/login': 'login.html',
   '/account': 'account.html',
+  '/spa': 'spa.html',
+  '/spa/settings': 'spa.html',
 } as const;
 
 const SESSION_COOKIE = 'demo_session';

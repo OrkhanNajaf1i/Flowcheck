@@ -5,6 +5,7 @@ import {
   createAuthCapture,
   createEnvironment,
   createProject,
+  createRecording,
   createRevision,
   createRun,
   createSecret,
@@ -20,6 +21,7 @@ import {
   getAuthProfile,
   getEnvironment,
   getProject,
+  getRecording,
   getRevision,
   getRun,
   getStepRuns,
@@ -27,6 +29,7 @@ import {
   listAuthProfiles,
   listEnvironments,
   listProjects,
+  listRecordingEvents,
   listRevisions,
   listRunsForTestCase,
   listSecrets,
@@ -37,6 +40,7 @@ import {
   requestAuthCaptureCancel,
   requestAuthCaptureSave,
   requestCancel,
+  requestRecordingStop,
   updateEnvironment,
   updateProject,
   updateTestCase,
@@ -45,6 +49,7 @@ import {
   createAuthCaptureSchema,
   createEnvironmentSchema,
   createProjectSchema,
+  createRecordingSchema,
   createRevisionSchema,
   createRunSchema,
   createSecretSchema,
@@ -68,6 +73,7 @@ import {
   environmentDto,
   environmentSnapshot,
   projectDto,
+  recordingDto,
   revisionDto,
   runDto,
   secretDto,
@@ -123,6 +129,22 @@ export function apiRoutes(db: FlowDb, config: ServerConfig): FastifyPluginAsyncZ
     );
     app.post('/auth-captures/:captureId/cancel', { schema: { params: idParam('captureId') } }, async (req, reply) =>
       reply.code(202).send(authCaptureDto(requestAuthCaptureCancel(db, req.params.captureId))),
+    );
+
+    // ---- Recorder: the runner records in a visible browser; the draft is never saved by itself ----
+    app.post(
+      '/projects/:projectId/recordings',
+      { schema: { params: idParam('projectId'), body: createRecordingSchema } },
+      async (req, reply) => {
+        const recording = createRecording(db, { projectId: req.params.projectId, ...req.body });
+        return reply.code(202).send(recordingDto(recording, []));
+      },
+    );
+    app.get('/recordings/:recordingId', { schema: { params: idParam('recordingId') } }, async (req) =>
+      recordingDto(getRecording(db, req.params.recordingId), listRecordingEvents(db, req.params.recordingId)),
+    );
+    app.post('/recordings/:recordingId/stop', { schema: { params: idParam('recordingId') } }, async (req, reply) =>
+      reply.code(202).send(recordingDto(requestRecordingStop(db, req.params.recordingId), listRecordingEvents(db, req.params.recordingId))),
     );
 
     // ---- Secrets: values go in, never come out ----

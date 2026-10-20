@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import type { Step } from './definition.ts';
 import type { ErrorCode } from './errors.ts';
+import type { RecorderWarning } from './recorder.ts';
 import type { EnvironmentKind, RunStatus, StepPhase, StepStatus } from './status.ts';
 import { environmentKindSchema } from './status.ts';
 import { isValidVariableName } from './templates.ts';
@@ -228,15 +230,18 @@ export interface SecretDto {
 
 // ---- Login sessions (auth profiles) ----
 
+/** First page of a login capture or a recording, relative to the website address. */
+const startPathSchema = z
+  .string()
+  .max(500)
+  .regex(/^\/(?!\/)/, 'Must start with a single "/", e.g. /login')
+  .default('/');
+
 export const createAuthCaptureSchema = z.strictObject({
   environmentId: id,
   name,
   /** Page opened first, e.g. /login. */
-  startPath: z
-    .string()
-    .max(500)
-    .regex(/^\/(?!\/)/, 'Must start with a single "/", e.g. /login')
-    .default('/'),
+  startPath: startPathSchema,
 });
 export type CreateAuthCaptureBody = z.input<typeof createAuthCaptureSchema>;
 
@@ -264,4 +269,33 @@ export interface AuthProfileDto {
   name: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ---- Recorder ----
+
+export const createRecordingSchema = z.strictObject({
+  environmentId: id,
+  startPath: startPathSchema,
+  /** The test the draft is meant for (informational). */
+  testCaseId: id.optional(),
+});
+export type CreateRecordingBody = z.input<typeof createRecordingSchema>;
+
+export const RECORDING_STATUSES = ['starting', 'recording', 'stopping', 'stopped', 'failed'] as const;
+export type RecordingStatus = (typeof RECORDING_STATUSES)[number];
+
+/** A recording with its draft steps, derived from the recorded events on every read. */
+export interface RecordingDto {
+  id: string;
+  projectId: string;
+  environmentId: string;
+  testCaseId: string | null;
+  startPath: string;
+  status: RecordingStatus;
+  error: string | null;
+  eventCount: number;
+  steps: Step[];
+  warnings: RecorderWarning[];
+  createdAt: string;
+  finishedAt: string | null;
 }

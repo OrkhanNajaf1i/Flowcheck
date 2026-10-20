@@ -363,6 +363,51 @@ export const en = {
     forWebsite: (site: string) => `for ${site}`,
     runOnlyOn: (site: string) => `This test uses a login session, so it can only run on "${site}".`,
   },
+  recorder: {
+    record: 'Record steps',
+    title: 'Record steps',
+    intro:
+      'A browser window opens on this computer. Use your website as usual: clicks, typing, choosing from lists and the Enter, Tab and Escape keys become steps.',
+    website: 'Website',
+    startPath: 'Start at',
+    startPathHint: 'Page opened first, e.g. / or /login',
+    limits:
+      'Checks are not recorded: add them yourself afterwards ("Check text", "Check page address"…). Typed passwords are never stored. Frames, new tabs, file uploads and drag and drop are not recorded; you get a warning when that happens. While recording, no test runs.',
+    start: 'Open browser and record',
+    status: {
+      starting: 'Opening a browser window on this computer…',
+      recording: 'Recording. Use the browser window, then press "Stop recording" here or in the window.',
+      stopping: 'Stopping…',
+      stopped: 'Recording finished. Review the steps below.',
+      failed: 'The recording stopped with an error. Steps recorded until then are shown below.',
+    },
+    stop: 'Stop recording',
+    recorded: (n: number) => (n === 1 ? '1 step' : `${n} steps`),
+    includeOpen: 'Start with the "Open page" step',
+    add: (n: number) => (n === 1 ? 'Add 1 step to the test' : `Add ${n} steps to the test`),
+    addHint: 'The steps are added to Main steps. Nothing is saved until you press Save — review the element of each step first.',
+    discard: 'Discard',
+    warnings: {
+      iframe: 'Actions inside frames (iframes) are not recorded.',
+      shadowDom: 'Actions inside shadow DOM components are not recorded.',
+      fileInput: 'File uploads are not supported and were not recorded.',
+      dragAndDrop: 'Drag and drop is not supported and was not recorded.',
+      unsupportedField:
+        'Some fields (sliders, colour pickers, rich text editors, multi-select lists) are not supported and were not recorded.',
+      popup: 'A popup or new tab was opened; actions there are not recorded.',
+      offsiteNavigation: 'The browser left the website; that part is not recorded.',
+      browserClosed: 'The recorder window was closed. The steps recorded until then are kept.',
+      timeLimit: 'The recording was stopped after 30 minutes.',
+      runnerStopped: 'FlowCheck stopped while recording. The steps recorded until then are kept.',
+      eventLimit: 'Too many actions: the recording was stopped.',
+      invalidEvent: 'Some actions could not be read and were not recorded.',
+      fragileLocator: 'No stable way to find this element was found (CSS path). Choose a better one in the step if you can.',
+      passwordField:
+        'Password field: the typed password was not stored. Create a secret named "password" or pick another secret in this step.',
+      bracesInValue: 'The typed text contained "{{" and was left empty; enter the value in the step.',
+      stepLimit: 'A test holds at most 200 main steps; the rest were not added.',
+    },
+  },
   secrets: {
     tab: 'Secrets',
     intro:

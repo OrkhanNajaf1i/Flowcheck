@@ -414,6 +414,15 @@ Qeyd olunan əməliyyatlar testin düzgünlüyünün sübutu deyil. Assertion-la
 
 iframe, popup, yeni tab, file input, drag-and-drop və s. → warning; səssiz natamam qeyd yoxdur.
 
+[DÜZƏLİŞ #48] İmplementasiya qərarları:
+- Əmr kanalı `runner_commands` deyil, `recording_sessions` sətridir (`stop_requested_at`), auth capture kimi (#47). Route-lar layihə daxilindədir: `POST /api/projects/:id/recordings`, `GET /api/recordings/:id`, `POST /api/recordings/:id/stop`.
+- `draftSteps` sütunu saxlanılmır: draft hər oxunuşda event-lərdən qurulur (`buildRecordedSteps`) — tək həqiqət mənbəyi.
+- Locator unikallığı (§7 TÖVSİYƏ) runner-də `count()` ilə deyil, **hərəkət anında səhifənin özündə** yoxlanılır: klikdən sonra naviqasiya/DOM dəyişikliyi gecikmiş yoxlamanı etibarsız edərdi. Rol və ad üçün Chromium-un öz accessibility dəyərləri (`computedRole`/`computedName`) istifadə olunur. Birmənalı olmayan rol/mətn stabil konteynerə (`within`) bağlanır; heç nə tapılmasa CSS yolu + `fragileLocator` xəbərdarlığı. Son yoxlama run-un özüdür.
+- Yalnız `isTrusted` event-lər qeyd olunur (səhifə skriptlərinin süni event-ləri addım yaratmır). Qeyd edilmiş hərəkətdən sonra 3 s ərzindəki naviqasiya onun nəticəsi sayılır; SPA route dəyişikliyi addım yaratmır.
+- Parol dəyəri səhifədən heç vaxt göndərilmir; draft-da `{{secrets.password}}` + xəbərdarlıq.
+- Overlay-də "Stop" düyməsi var (open shadow root, `data-flowcheck-recorder`). Limitlər: 30 dəqiqə, 2000 event. Brauzer bağlananda `stopped` + `browserClosed` xəbərdarlığı; runner ölərsə `failed`, event-lər saxlanılır.
+- Test-only: `FLOWCHECK_RECORDER_HEADLESS=1`, `FLOWCHECK_RECORDER_DEBUG_PORT` (e2e recorder brauzerinə CDP ilə qoşulub real, trusted event-lər yaradır).
+
 ---
 
 ## 9. API request məntiqi
@@ -942,6 +951,7 @@ Hər mərhələnin sonunda hesabat:
 | 39 | §6 | Addım növlərini istifadəçinin özünün yaratması təklif olundu | **Qərar:** addım növləri statik (engine kodu) qalır — istifadəçi tərəfindən yaradılan növ ixtiyari kod icrası olardı (§6 qadağası) və nəticənin etibarlılığını pozardı. İstifadəçi addımları (instance) sərbəst yaradır. Gələcək ideya: təkrar istifadə olunan **addım qrupları** (məs. "Login" bir dəfə yaradılıb bir neçə testdə istifadə) |
 | 40 | §6 | `assertText`/`assertValue`/`assertEnabled` son oxunuşda ~1 ms timeout alıb `INTERNAL_ERROR` verirdi (e2e tam suite-də aşkarlandı) | Oxunuşa minimum 500 ms; deadline-dan sonrakı timeout son müşahidə ilə `ASSERTION_FAILED` sayılır |
 | 46 | §11/§16 | Secret sayt tərəfindən URL-ə yazılanda (məs. `/done?name=<secret>`) addım sübutundakı `url` sahəsi açıq qalırdı | Redaksiya mərkəzləşdirildi: engine hər addımın bütün `expected`/`actual`-ını və xəta mesajını saxlamadan əvvəl məlum secret dəyərlərindən (düz, URL-encoded, base64) təmizləyir. Login şablonu parolu `{{secrets.testPassword}}`-dən oxuyur |
+| 48 | §8/§5/§18 | Recorder üçün: runner-də gecikmiş `count()` yoxlaması naviqasiyadan sonra etibarsızdır; `draftSteps` event-lərlə dublikat məlumat idi; `runner_commands` capture ilə uyğunsuz idi; süni (untrusted) event-lər saxta addım yarada bilərdi | Unikallıq hərəkət anında səhifədə (Chromium accessibility dəyərləri ilə) yoxlanılır; draft event-lərdən qurulur; sessiya sətri əmr kanalıdır; yalnız trusted event-lər; ətraflı §8 [DÜZƏLİŞ #48] |
 | 47 | §12 | Auth capture üçün server ilə runner arasında əmr mexanizmi müəyyən edilməmişdi (server brauzer aça bilməz) | Capture sətri əmr kanalıdır (save/cancel bayraqları, heartbeat, 60 s orphan timeout, 15 dəq limit); profil sayt + ad üzrə əvəz olunur; run dialoqu yalnız profilin saytını təklif edir, server başqasını `AUTH_PROFILE_ENVIRONMENT_MISMATCH` ilə rədd edir |
 | 44 | §10/#21 | Network check üçün sabit origin tələbi eyni testi local və staging-də işlətməyə mane olurdu | `match.origin`: `"api"` / `"frontend"` (run-un mühitindən götürülür) və ya açıq origin; hər halda allowlist-də olmalıdır (`ORIGIN_NOT_ALLOWED`). Output-lar: JSON Pointer və ya header-dən yalnız primitiv dəyər; yalnız addım (bütün network check-lər daxil) keçəndə publish olunur; ad təkrarı və əvvəlki addımda yaranmamış output istifadəsi save zamanı rədd edilir. Uyğun sorğu olmayanda hesabatda müşahidə olunan sorğuların siyahısı göstərilir |
 | 45 | §15 | Bəzi sahələrin label-i inputa bağlı deyildi (a11y; test də tapa bilmirdi) | `Field` `htmlFor` verilməyəndə özü id yaradıb bağlayır, hint/error `aria-describedby` ilə əlaqələndirilir |

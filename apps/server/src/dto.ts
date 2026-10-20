@@ -4,6 +4,7 @@ import type {
   AuthProfileRow,
   EnvironmentRow,
   ProjectRow,
+  RecordingRow,
   RevisionRow,
   RunRow,
   SecretInfo,
@@ -14,10 +15,13 @@ import {
   type ArtifactDto,
   type AuthCaptureDto,
   type AuthProfileDto,
+  buildRecordedSteps,
   type EnvironmentDto,
   type EnvironmentSnapshot,
   effectiveAllowedOrigins,
   type ProjectDto,
+  type RecordedEvent,
+  type RecordingDto,
   type RevisionDto,
   type RunDto,
   type SecretDto,
@@ -49,6 +53,25 @@ export function authCaptureDto(row: AuthCaptureRow): AuthCaptureDto {
     status: row.status,
     error: row.error,
     authProfileId: row.authProfileId,
+    createdAt: iso(row.createdAt),
+    finishedAt: isoOrNull(row.finishedAt),
+  };
+}
+
+/** Draft steps are derived from the stored events on every read (single source of truth). */
+export function recordingDto(row: RecordingRow, events: RecordedEvent[]): RecordingDto {
+  const { steps, warnings } = buildRecordedSteps(events, row.startPath);
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    environmentId: row.environmentId,
+    testCaseId: row.testCaseId,
+    startPath: row.startPath,
+    status: row.status,
+    error: row.error,
+    eventCount: events.length,
+    steps,
+    warnings,
     createdAt: iso(row.createdAt),
     finishedAt: isoOrNull(row.finishedAt),
   };

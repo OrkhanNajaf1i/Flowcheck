@@ -336,6 +336,11 @@ function stepToFormBase(step: Step): StepForm {
   }
 }
 
+/** Recorded draft steps as new editor steps (fresh ids, so they never clash with existing ones). */
+export function recordedStepsToForm(steps: Step[]): StepForm[] {
+  return steps.map((step) => ({ ...stepToForm(step), id: newStepId() }));
+}
+
 export function toForm(testCase: { name: string; description: string }, def: TestDefinition): EditorForm {
   return {
     name: testCase.name,
