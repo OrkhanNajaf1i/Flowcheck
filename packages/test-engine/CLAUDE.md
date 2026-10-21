@@ -22,7 +22,8 @@ Spec: PROJECT_RULES §6, §7, §9, §10, §11, §13, §16, §17.
 ## Target policy
 - `installTargetGuard` routes every browser request: non-allowlisted origin or blocked IP → aborted and recorded.
 - API steps check origin + resolved IPs before sending (`assertTargetAllowed`). Metadata IPs are always blocked; private/loopback only with `allowPrivateNetwork`.
-- Known gap (documented, not hidden): DNS can change between our check and the real connection (TOCTOU).
+- `startTargetGuard(policy)`: local proxy for all browser traffic of a context (`contextOptions`, bypass `<-loopback>`) + route check for the first request. Never rely on `route()` alone: it does not see redirect hops.
+- Known gap (documented, not hidden): for API steps DNS can change between our check and the real connection (TOCTOU).
 
 ## Redaction
 - `redact.ts`: sensitive headers, known secret values (plain, URL-encoded, base64). Persisted bodies ≤ 256 KB, parse limit 1 MB. Screenshots are not redacted — mark them `sensitive`.

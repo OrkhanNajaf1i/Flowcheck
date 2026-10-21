@@ -26,7 +26,8 @@ FlowCheck sends real requests to systems you configure. Running locally is **not
 - The hostname is resolved and **every** returned address is checked (IPv4, IPv6, IPv4-mapped IPv6).
 - Loopback, private (10/8, 172.16/12, 192.168/16), link-local (169.254/16), CGNAT (100.64/10), IPv6 ULA/link-local and other non-public ranges are blocked unless the environment has **Allow private network** switched on.
 - Cloud metadata endpoints are **always** blocked: `169.254.169.254`, `fd00:ec2::254`, `100.100.100.200`, `metadata.google.internal`.
-- **Known limitation:** Chromium and Playwright's request client resolve DNS again when connecting. A hostile DNS server could answer differently between our check and the connection (TOCTOU). FlowCheck does not claim full SSRF protection; only point it at systems you are allowed to test.
+- **Browser traffic** (runs, login capture, recorder) goes through a local checking proxy in the runner: every request and every redirect hop (CONNECT for HTTPS, loopback included) is checked against the allowed origins and the resolved IPs, and the proxy connects to the IP it checked. Playwright's route handler alone would miss redirect hops; an acceptance test covers a two-hop redirect to a non-allowed origin.
+- **Known limitation:** API steps use Playwright's request client, which resolves DNS again when connecting (redirects are not followed). A hostile DNS server could answer differently between our check and that connection (TOCTOU). FlowCheck does not claim full SSRF protection; only point it at systems you are allowed to test.
 
 ## Evidence and sensitive data
 

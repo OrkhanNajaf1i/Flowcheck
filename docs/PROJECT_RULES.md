@@ -715,7 +715,7 @@ Default yalnız `127.0.0.1`-də dinləyir. "Lokal = təhlükəsiz" fərziyyəsi 
 |---|---|---|
 | Runner `apiRequest` (Node) | Göndərməzdən əvvəl URL parse + origin allowlist + DNS resolve + IP siyasəti; `maxRedirects: 0` | `ORIGIN_NOT_ALLOWED` / `SSRF_BLOCKED` |
 | Browser main document navigation + subresources | `context.route('**/*')`: origin allowlist-də deyilsə `route.abort('blockedbyclient')`, step-ə warning/xəta yazılır | main frame navigation → `ORIGIN_NOT_ALLOWED` (step failed); subresource → console/warning (səhifə üçüncü tərəf resursları yükləyə bilməz — CDN lazımdırsa allowlist-ə əlavə) |
-| Browser redirect-ləri | Hər redirect hop ayrıca request kimi `route`-dan keçir | eyni |
+| Browser redirect-ləri | [DÜZƏLİŞ #53] `route` yalnız ilk URL-i görür; hop-lar lokal yoxlayıcı proxy-də yoxlanılır | eyni (`ORIGIN_NOT_ALLOWED` / `SSRF_BLOCKED`) |
 | Service worker | `serviceWorkers: 'block'` | — |
 | WebSocket | İlk versiyada `routeWebSocket` ilə allowlist-dən kənar bağlantılar bloklanır (API mövcudluğu yoxlanılmalıdır); WS assertion-ları yoxdur | warning |
 
@@ -725,7 +725,8 @@ Default yalnız `127.0.0.1`-də dinləyir. "Lokal = təhlükəsiz" fərziyyəsi 
 - [DÜZƏLİŞ — tamamlandı] IPv6 ekvivalentləri: `::1`, `fe80::/10`, `fc00::/7`, IPv4-mapped `::ffff:0:0/96` (mapped ünvan IPv4 qaydası ilə yoxlanılır); həmçinin `0.0.0.0/8`, `100.64.0.0/10` (CGNAT).
 - **Həmişə bloklanır** (`allowPrivateNetwork` olsa belə): `169.254.169.254`, `fd00:ec2::254`, `metadata.google.internal` hostname-i, `100.100.100.200` (Alibaba).
 - DNS rebinding: resolve olunmuş **bütün** IP-lər yoxlanılır.
-- [DÜZƏLİŞ — dürüst məhdudiyyət] Playwright `APIRequestContext` və Chromium öz DNS resolve-unu edir; FlowCheck-in yoxlaması ilə faktiki qoşulma arasında TOCTOU pəncərəsi qalır. Bu risk README-də açıq yazılır; "tam SSRF qorunması" iddia olunmur.
+- [DÜZƏLİŞ — dürüst məhdudiyyət] Playwright `APIRequestContext` öz DNS resolve-unu edir; API addımlarında FlowCheck-in yoxlaması ilə faktiki qoşulma arasında TOCTOU pəncərəsi qalır. Bu risk README-də açıq yazılır; "tam SSRF qorunması" iddia olunmur.
+- [DÜZƏLİŞ #53] **Brauzer trafiki lokal yoxlayıcı proxy-dən keçir.** Playwright-ın route handler-i redirect zəncirinin yalnız ilk URL-ini görür (sənədləşdirilmiş davranış) — yuxarıdakı cədvəldəki "hər redirect hop route-dan keçir" iddiası yanlış idi və e2e testi icazəli origin-dən icazəsiz origin-ə redirect-in izlənildiyini göstərdi. İndi test/capture/recorder brauzerinin bütün trafiki (loopback daxil, `<-loopback>`) runner-dəki proxy-dən keçir: hər sorğu və hər redirect hop-u (HTTPS üçün CONNECT) origin + resolve olunmuş IP üzrə yoxlanılır və proxy **yoxladığı IP-yə özü qoşulur** — brauzer üçün DNS TOCTOU bağlanır. Route yoxlaması ilk sorğu üçün aydın xəta mesajı üçün qalır.
 
 Run icrasından əvvəl xəbərdarlıq (§15).
 
@@ -956,6 +957,7 @@ Hər mərhələnin sonunda hesabat:
 | 39 | §6 | Addım növlərini istifadəçinin özünün yaratması təklif olundu | **Qərar:** addım növləri statik (engine kodu) qalır — istifadəçi tərəfindən yaradılan növ ixtiyari kod icrası olardı (§6 qadağası) və nəticənin etibarlılığını pozardı. İstifadəçi addımları (instance) sərbəst yaradır. Gələcək ideya: təkrar istifadə olunan **addım qrupları** (məs. "Login" bir dəfə yaradılıb bir neçə testdə istifadə) |
 | 40 | §6 | `assertText`/`assertValue`/`assertEnabled` son oxunuşda ~1 ms timeout alıb `INTERNAL_ERROR` verirdi (e2e tam suite-də aşkarlandı) | Oxunuşa minimum 500 ms; deadline-dan sonrakı timeout son müşahidə ilə `ASSERTION_FAILED` sayılır |
 | 46 | §11/§16 | Secret sayt tərəfindən URL-ə yazılanda (məs. `/done?name=<secret>`) addım sübutundakı `url` sahəsi açıq qalırdı | Redaksiya mərkəzləşdirildi: engine hər addımın bütün `expected`/`actual`-ını və xəta mesajını saxlamadan əvvəl məlum secret dəyərlərindən (düz, URL-encoded, base64) təmizləyir. Login şablonu parolu `{{secrets.testPassword}}`-dən oxuyur |
+| 53 | §17 | "Hər redirect hop route-dan keçir" yanlış idi: Playwright route redirect hop-larını göstərmir; e2e icazəsiz origin-ə redirect-in izlənildiyini aşkar etdi | Brauzer trafiki üçün lokal yoxlayıcı proxy (bütün hop-lar, CONNECT, yoxlanmış IP-yə qoşulma); qəbul testləri 23, 26, 31 əlavə edildi |
 | 52 | §16 | Retention qaydası var idi, mexanizm yox | Yaş + layihə kvotası, aktiv run-lara toxunulmur, 6 saatdan bir; §16 [DÜZƏLİŞ #52] |
 | 51 | §17/§25 | Bootstrap token: session cookie hər brauzer açılışında linki tələb edirdi; cookie-lər port ayırmır; dev rejimində (Vite) `/?token=` serverə çatmırdı | `/api/session?token=` (proxy ilə də işləyir), port adlı cookie, HMAC dəyəri, 30 günlük cookie; §17 [DÜZƏLİŞ #51] |
 | 50 | §8 | Recorder yoxlama qeyd etmirdi; "modal açıldımı?" kimi yoxlamalar sonradan əl ilə qurulmalı idi | Toolbar-da tester tərəfindən seçilən `assertVisible`/`assertText`; seçim klik-i səhifəyə ötürülmür; toolbar UI dilində |

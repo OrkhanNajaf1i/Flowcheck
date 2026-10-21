@@ -25,7 +25,7 @@ Phases 1–4 and the access token and artifact retention of phase 5 are implemen
 
 ## Known technical limits
 
-- DNS TOCTOU between the SSRF check and the real connection (see [security.md](security.md)).
+- DNS TOCTOU between the SSRF check and the real connection of API steps; browser traffic connects to the checked IP through the runner's proxy (see [security.md](security.md)).
 - Login sessions keep cookies, localStorage and IndexedDB only — not sessionStorage, passkeys/WebAuthn or server-side token refresh. An expired session shows up as a failing step on the first page that needs a login; FlowCheck does not claim the cause.
 - Templates have no escape syntax: a literal `{{` cannot be written in a templated field.
 - Browser context isolation does not clean server-side data; only explicit cleanup steps do.

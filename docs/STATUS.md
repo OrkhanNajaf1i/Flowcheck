@@ -17,28 +17,43 @@ Last updated: 2026-10-20 (phase 2).
 | Runner: claim, heartbeat, cancel with grace period, run timeout, shutdown, orphan recovery, screenshots | done | `apps/runner` tests (6) + e2e |
 | Real passing and failing runs | done | `e2e` (10 tests, real Chromium) |
 
-### Acceptance criteria covered so far (PROJECT_RULES §20)
+### Acceptance criteria (PROJECT_RULES §20) — all covered
 
-| # | Criterion | Covered by |
+| # | Criterion | Evidence |
 |---|---|---|
-| 3 | navigate → click → assertVisible built and run (via API; UI in phase 2) | e2e "passes in success mode" |
-| 10 | success mode passes | e2e |
-| 11 | create-order-500 fails on the status assertion, observed 500 reported | e2e (API variant; network-check variant in phase 3) |
-| 14 | ambiguous locator → `AMBIGUOUS_LOCATOR` | e2e |
-| 15 | 403 expected and received → passed | e2e |
-| 16 | missing variable rejected clearly | shared + e2e |
+| 1 | starts from a clean repo with the documented commands | manual: fresh clone → `pnpm install` → `pnpm start` (phase 5 part 2) |
+| 2 | project and environment are created | e2e `ui.spec` getting-started guide |
+| 3 | manual editor: navigate → click → assertVisible | e2e `phase1`, `ui.spec` |
+| 4 | recorder: fill → click → navigation recorded, saved, re-run | e2e `recorder.spec` (draft replays and passes) |
+| 5 | success-message assertion | e2e `network.spec` (ui-success-but-no-order) |
+| 6 | POST /orders check on a click, fast response not missed | e2e `network.spec` |
+| 7 | orderId taken from the 201 response | e2e `network.spec` |
+| 8 | next API step uses orderId | e2e `network.spec` |
+| 9 | GET proves the order exists | e2e `network.spec` |
+| 10 | success mode passes | e2e `phase1`, `network.spec` |
+| 11 | create-order-500 fails on the status assertion, not "no response" | e2e `phase1`, `network.spec` |
+| 12 | ui-success-but-no-order: message passes, existence check fails | e2e `network.spec` |
+| 13 | cart-not-cleared: cart assertion fails | e2e `network.spec` |
+| 14 | ambiguous locator → `AMBIGUOUS_LOCATOR` | e2e `phase1` |
+| 15 | 403 expected and received → passed | e2e `phase1` |
+| 16 | missing variable → `MISSING_VARIABLE` | shared + e2e `phase1` |
+| 17 | secret never in report, log or API response | e2e `secrets.spec` |
 | 18 | edits do not change an earlier run's revision | db + server tests |
 | 19 | environment snapshot unaffected by later edits | db + server tests |
-| 20 | after the first main failure, remaining main steps skipped | e2e |
-| 22 | cancel works | e2e (browser closing verified only indirectly via `finally`) |
-| 23 | restart → running run interrupted | db test (real process restart not yet e2e) |
-| 25 | queue never runs the same run twice | db concurrent claim test |
-| 26 | outside-allowlist navigation blocked | e2e (redirect bypass: covered by design, no dedicated e2e yet) |
+| 20 | after the first main failure the rest is skipped | e2e `phase1` |
+| 21 | cleanup does not erase the main failure | e2e `network.spec` |
+| 22 | cancel works, browser closed | e2e `phase1` (browser closing via `finally`, not observed directly) |
+| 23 | restart → running run interrupted | e2e `hardening.spec` (real runner process killed and restarted) + db test |
+| 24 | recorder and runner never hold the lock together | e2e `recorder.spec` + db tests |
+| 25 | the queue never runs a run twice | db concurrent-claim test |
+| 26 | outside-allowlist API URL and redirect bypass blocked | e2e `phase1`, `hardening.spec` (API redirect, browser redirect, two-hop chain, target never hit) |
 | 27 | executable code rejected in definitions | shared + server tests |
-| 28 | archived test keeps run history | server test |
+| 28 | archived test keeps its run reports | server test |
+| 29 | closing the recorder browser ends the session properly | e2e `recorder.spec` |
 | 30 | not executed ≠ passed | engine status tests |
-| 32 | cloud metadata blocked | unit + e2e |
-| 33 | run timeout → interrupted | e2e |
+| 31 | network check works on a page with a service worker | e2e `hardening.spec` |
+| 32 | cloud metadata address blocked | unit + e2e `phase1` |
+| 33 | run timeout → interrupted (`RUN_TIMEOUT`) | e2e `phase1` |
 
 ## Phase 2 — done
 
@@ -103,6 +118,10 @@ Encrypted secrets per project (API + "Secrets" tab), `{{secrets.name}}` in fill 
 
 "Record steps" in the editor's main steps: the runner opens a visible browser (target guard, service workers blocked, 30 min limit) with a recorder script and an in-page "Stop" overlay. Recorded: click, typing (one fill per field, last value; flushed before any other action and on stop), choose from list, tick/untick, Enter/Tab/Escape, direct navigation (not the result of a recorded action, 3 s window); SPA route changes do not add steps. Only trusted events are recorded; the runner validates every event with Zod and stores it with `sequence` assigned in the same transaction, duplicates by `clientEventId` are ignored. Locators: test id → data-* → role + Chromium's own accessible name → label → placeholder → name → alt/title → text → id, each checked to match exactly one element on the page; an ambiguous role/text is scoped to a container with a stable handle; otherwise a CSS path marked fragile. Password values are never sent (draft uses `{{secrets.password}}` + warning). Frames, shadow DOM, popups, file inputs, drag and drop, unsupported fields → warnings. The draft is derived from the events on every read and only becomes a revision when the tester saves. Evidence: shared (draft building, event schema), db (sequence, duplicates, lock, stop, orphans, project delete), server (start/stop/lock/start path), e2e (`recorder.spec.ts`, 8 tests: criteria 4, 24, 29, password, SPA, scoping, overlay Stop, UI flow).
 
+## Phase 5 (part 2): remaining acceptance criteria — done
+
+All 33 criteria of PROJECT_RULES §20 now have evidence (table above). Found and fixed on the way: a browser redirect from an allowed origin to a non-allowed one was followed, because Playwright's route handler does not see redirect hops. All browser traffic now goes through a checking proxy in the runner (every hop, CONNECT for HTTPS, connects to the checked IP). Criterion 1 was checked by hand: fresh `git clone` → `pnpm install --frozen-lockfile` (41.9 s) → `pnpm start` on port 4520 built the UI, printed the access link, the link set the cookie (302 → /), UI and API answered 200 (Chromium was already in the user cache; on a new machine `pnpm playwright:install` is the documented extra step).
+
 ## Phase 5 (part 1): access token and artifact retention — done
 
 The server prints `Open FlowCheck: …/api/session?token=…` (Vite port in dev); opening it sets `flowcheck_session_<port>` (HMAC of the token, HttpOnly, SameSite=Strict, 30 days) and every `/api` request without it gets `401` — the UI explains how to open the link. Token in `data/access.token` (same across restarts) or `FLOWCHECK_ACCESS_TOKEN`. Artifact retention at start and every 6 h: 30 days, then 500 MB per project oldest first, never for queued/running runs. Evidence: db (age, quota, active runs), server (401 incl. artifacts, forged cookie, link exchange, token persistence, file deletion, config validation), e2e (all suites use the cookie; a browser without it sees the explanation and the link signs it in), manual start on port 4510 (link printed, 401, cookie + redirect).
@@ -118,8 +137,8 @@ Optional per page step (`screenshot: true`, editor: step → Advanced settings):
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.
-- **Phase 5 (rest):** remaining acceptance criteria (1, 2, 5–9, 12, 13, 17, 21, 31) and e2e for real process restart and redirect bypass.
+- Nothing from phases 1–5 is open except the phase 2 leftovers above.
 
 ## Next concrete task
 
-Phase 5 (rest): remaining acceptance criteria (service-worker page in the demo for criterion 31, real process restart, redirect bypass), then the phase 2 leftovers (cleanup after cancel, revision diff).
+Phase 2 leftovers: best-effort cleanup after cancel, then the revision diff view.
