@@ -60,7 +60,7 @@ export function authCaptureDto(row: AuthCaptureRow): AuthCaptureDto {
 
 /** Draft steps are derived from the stored events on every read (single source of truth). */
 export function recordingDto(row: RecordingRow, events: RecordedEvent[]): RecordingDto {
-  const { steps, warnings } = buildRecordedSteps(events, row.startPath);
+  const { steps, warnings, suggestions } = buildRecordedSteps(events, row.startPath);
   return {
     id: row.id,
     projectId: row.projectId,
@@ -72,6 +72,7 @@ export function recordingDto(row: RecordingRow, events: RecordedEvent[]): Record
     eventCount: events.length,
     steps,
     warnings,
+    suggestions,
     createdAt: iso(row.createdAt),
     finishedAt: isoOrNull(row.finishedAt),
   };

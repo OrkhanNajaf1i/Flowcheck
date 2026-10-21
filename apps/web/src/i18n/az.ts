@@ -397,6 +397,16 @@ export const az: Dict = {
     add: (n: number) => `${n} addımı testə əlavə et`,
     addHint: 'Addımlar əsas addımlara əlavə olunur. "Yadda saxla" basmayınca heç nə saxlanılmır — əvvəlcə hər addımın elementinə baxın.',
     discard: 'İmtina et',
+    suggestedHint:
+      'İşarələnmiş yoxlamalar qeyd zamanı hər hərəkətdən sonra baş verənlərə əsasən təklif olunub. Gözlənilən davranış olmayanların işarəsini götürün.',
+    suggestion: {
+      dialog: 'Pəncərə açıldı',
+      message: 'Mesaj',
+      heading: 'Göründü',
+      url: 'Səhifə',
+      request: 'Sorğu',
+    },
+    failedRequest: 'Bu sorğu qeyd zamanı uğursuz oldu, ona görə yoxlama işarələnməyib. Yalnız bu status gözləniləndirsə işarələyin.',
     warnings: {
       iframe: 'Frame (iframe) daxilindəki hərəkətlər qeyd olunmur.',
       shadowDom: 'Shadow DOM komponentləri daxilindəki hərəkətlər qeyd olunmur.',

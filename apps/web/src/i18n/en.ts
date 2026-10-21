@@ -395,6 +395,16 @@ export const en = {
     add: (n: number) => (n === 1 ? 'Add 1 step to the test' : `Add ${n} steps to the test`),
     addHint: 'The steps are added to Main steps. Nothing is saved until you press Save — review the element of each step first.',
     discard: 'Discard',
+    suggestedHint:
+      'Ticked checks were suggested from what happened after each action while recording. Untick anything that was not the expected behaviour.',
+    suggestion: {
+      dialog: 'Window opened',
+      message: 'Message',
+      heading: 'Shown',
+      url: 'Page',
+      request: 'Request',
+    },
+    failedRequest: 'This request failed while recording, so the check is not ticked. Tick it only if this status is expected.',
     warnings: {
       iframe: 'Actions inside frames (iframes) are not recorded.',
       shadowDom: 'Actions inside shadow DOM components are not recorded.',

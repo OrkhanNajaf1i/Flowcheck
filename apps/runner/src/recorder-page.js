@@ -61,10 +61,12 @@ function flowcheckRecorder(config) {
     const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
   };
+  /** Sends an event and returns its clientEventId (observations refer to it). */
   const send = (event) => {
+    const clientEventId = uuid();
     const binding = window[config.binding];
-    if (typeof binding !== 'function') return;
-    Promise.resolve(binding({ clientEventId: uuid(), ...event })).catch(() => undefined);
+    if (typeof binding === 'function') Promise.resolve(binding({ clientEventId, ...event })).catch(() => undefined);
+    return clientEventId;
   };
   const warned = new Set();
   const warnOnce = (what) => {
@@ -391,6 +393,75 @@ function flowcheckRecorder(config) {
   /** Events from inside a shadow root are retargeted; such targets are not supported. */
   const inShadow = (e) => e.composedPath()[0] !== e.target;
 
+  // ---- Observing what an action changed: suggested checks (the tester reviews them) ----
+
+  const OBSERVE_MS = 1200;
+  const MAX_OBSERVED = 3;
+  const WATCHED = [
+    ['dialog', 'dialog[open], [role="dialog"], [role="alertdialog"]'],
+    ['message', '[role="alert"], [role="status"], [aria-live="polite"], [aria-live="assertive"], output'],
+    ['heading', 'h1, h2, h3, [role="heading"]'],
+  ];
+  const isShown = (el) => el.isConnected && !a11yHidden(el) && el.getClientRects().length > 0;
+  /** Visible candidates with their text, to compare before and after an action. */
+  function snapshot() {
+    const out = new Map();
+    for (const [what, selector] of WATCHED) {
+      for (const el of document.querySelectorAll(selector)) {
+        if (!out.has(el) && isShown(el) && !overlayHost?.contains(el)) out.set(el, { what, text: collapse(el.innerText) });
+      }
+    }
+    return out;
+  }
+  /** Texts with long numbers (order #10234, 12:45:03) change between runs: check visibility instead. */
+  const looksVariable = (text) => /\d{3,}|\d+[:.]\d+/.test(text);
+
+  let watching = null;
+  function watchAfter(after) {
+    finishWatch();
+    watching = { after, before: snapshot(), timer: setTimeout(finishWatch, OBSERVE_MS) };
+  }
+  function finishWatch() {
+    if (!watching) return;
+    const { after, before, timer } = watching;
+    watching = null;
+    clearTimeout(timer);
+    const appeared = [];
+    for (const [el, now] of snapshot()) {
+      const was = before.get(el);
+      // New on screen, or a message whose text changed (e.g. "Saved" in a status region).
+      if (!was || (now.what === 'message' && now.text !== was.text && now.text !== '')) appeared.push({ el, ...now });
+    }
+    const rank = { dialog: 0, message: 1, heading: 2 };
+    appeared.sort((a, b) => rank[a.what] - rank[b.what]);
+    // Headings inside a reported dialog add nothing; headings at all only when nothing else changed.
+    const dialogs = appeared.filter((a) => a.what === 'dialog').map((a) => a.el);
+    const others = appeared.filter((a) => a.what !== 'heading').length > 0;
+    let sent = 0;
+    for (const item of appeared) {
+      if (sent >= MAX_OBSERVED) break;
+      if (item.what === 'heading' && (others || dialogs.some((d) => d.contains(item.el)))) continue;
+      let target = item.el;
+      let found = describe(target);
+      if (found.fragile && item.what === 'dialog') {
+        // An unnamed dialog: its heading is a stable way to see that it opened.
+        const heading = target.querySelector('h1, h2, h3, [role="heading"]');
+        if (heading) {
+          target = heading;
+          found = describe(heading);
+        }
+      }
+      if (found.fragile) continue;
+      const text = collapse(target.innerText);
+      if (item.what === 'message' && usableValue(text) && !looksVariable(text))
+        send({ kind: 'observed', after, what: 'message', ...found, text });
+      else send({ kind: 'observed', after, what: item.what, ...found });
+      sent += 1;
+    }
+  }
+  /** A recorded action whose effects are observed. */
+  const sendAction = (event) => watchAfter(send(event));
+
   // ---- Typing: one fill per field, sent after a pause and before any other action ----
 
   let pending = null;
@@ -403,7 +474,10 @@ function flowcheckRecorder(config) {
     pending.lastSent = value;
     send({ kind: 'fill', locator: pending.locator, fragile: pending.fragile, value: value.slice(0, 2000), password: pending.password });
   }
-  window.__flowcheckRecorderFlush = flushPending;
+  window.__flowcheckRecorderFlush = () => {
+    flushPending();
+    finishWatch();
+  };
 
   const isTextField = (el) => el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && TEXT_TYPES.has(el.type));
 
@@ -443,13 +517,13 @@ function flowcheckRecorder(config) {
         const sameLabel = Array.from(el.options).filter((o) => collapse(o.label || o.textContent) === label).length;
         const by = usableValue(label) && sameLabel === 1 ? { by: 'label', value: label } : { by: 'value', value: option.value };
         if (!usableValue(by.value)) return warnOnce('unsupportedField');
-        send({ kind: 'select', ...describe(el), option: by });
+        sendAction({ kind: 'select', ...describe(el), option: by });
       } else if (el instanceof HTMLInputElement && el.type === 'checkbox') {
         flushPending();
-        send({ kind: el.checked ? 'check' : 'uncheck', ...describe(el) });
+        sendAction({ kind: el.checked ? 'check' : 'uncheck', ...describe(el) });
       } else if (el instanceof HTMLInputElement && el.type === 'radio') {
         flushPending();
-        if (el.checked) send({ kind: 'check', ...describe(el) });
+        if (el.checked) sendAction({ kind: 'check', ...describe(el) });
       } else if (el instanceof HTMLInputElement && el.type === 'file') {
         warnOnce('fileInput');
       } else if (pending?.el === el) {
@@ -479,7 +553,7 @@ function flowcheckRecorder(config) {
       // Enter on a button or in a form also fires a click; the recorded key press already does it.
       if (e.detail === 0 && Date.now() - lastEnterAt < 500) return;
       flushPending();
-      send({ kind: 'click', ...describe(el) });
+      sendAction({ kind: 'click', ...describe(el) });
     },
     true,
   );
@@ -496,10 +570,18 @@ function flowcheckRecorder(config) {
       flushPending();
       if (e.key === 'Enter') lastEnterAt = Date.now();
       const onElement = el && el !== document.body && el !== document.documentElement && !(overlayHost && el === overlayHost);
-      send({ kind: 'press', key: e.key, ...(onElement ? describe(el) : { fragile: false }) });
+      sendAction({ kind: 'press', key: e.key, ...(onElement ? describe(el) : { fragile: false }) });
     },
     true,
   );
+
+  // Navigations the page starts itself (links, forms, scripts, pushState). Typing in the address bar
+  // fires no navigate event, so the runner can tell the tester's own navigations apart.
+  if (window.navigation) {
+    window.navigation.addEventListener('navigate', (e) => {
+      if (!e.hashChange) send({ kind: 'pageNavigation' });
+    });
+  }
 
   addEventListener('drop', (e) => e.isTrusted && warnOnce('dragAndDrop'), true);
   addEventListener('pagehide', flushPending, true);

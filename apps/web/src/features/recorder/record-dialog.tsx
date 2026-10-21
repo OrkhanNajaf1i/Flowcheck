@@ -1,6 +1,6 @@
-import type { RecorderWarning, RecordingDto, Step } from '@flowcheck/shared';
+import type { RecordedSuggestion, RecorderWarning, RecordingDto, Step } from '@flowcheck/shared';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { AlertTriangle, CheckCircle2, Circle, Loader2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Circle, Loader2, ShieldCheck, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -9,6 +9,7 @@ import { Field } from '@/components/ui/label';
 import { ErrorState, Loading, Notice } from '@/components/ui/states';
 import { language, t } from '@/i18n';
 import { api } from '@/lib/api';
+import { applySuggestions } from './apply-suggestions';
 
 const FINAL = new Set<RecordingDto['status']>(['stopped', 'failed']);
 
@@ -36,6 +37,15 @@ export function RecordDialog({
   const [startPath, setStartPath] = useState('/');
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [includeOpen, setIncludeOpen] = useState(mainIsEmpty);
+  /** Suggestions the tester flipped from their default (selected unless the request failed). */
+  const [flipped, setFlipped] = useState<Set<string>>(new Set());
+  const isSelected = (s: RecordedSuggestion) => s.selected !== flipped.has(s.id);
+  const toggle = (id: string) =>
+    setFlipped((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
 
   const start = useMutation({
     mutationFn: () =>
@@ -54,7 +64,8 @@ export function RecordDialog({
   const status = recording.data?.status;
   const done = status !== undefined && FINAL.has(status);
   const steps = recording.data?.steps ?? [];
-  const chosen = includeOpen ? steps : steps.slice(1);
+  const suggestions = recording.data?.suggestions ?? [];
+  const chosen = applySuggestions(includeOpen ? steps : steps.slice(1), suggestions, isSelected);
 
   const close = () => {
     // Closing while the browser is open would keep the execution lock: stop first.
@@ -116,7 +127,13 @@ export function RecordDialog({
             </p>
             {recording.data?.error ? <p className="text-xs text-muted-foreground">{recording.data.error}</p> : null}
 
-            <RecordedSteps steps={steps} warnings={recording.data?.warnings ?? []} />
+            <RecordedSteps
+              steps={steps}
+              warnings={recording.data?.warnings ?? []}
+              suggestions={suggestions}
+              isSelected={isSelected}
+              onToggle={toggle}
+            />
 
             {done && steps.length > 1 ? (
               <label className="flex items-center gap-2 text-sm">
@@ -156,11 +173,24 @@ export function RecordDialog({
   );
 }
 
-function RecordedSteps({ steps, warnings }: { steps: Step[]; warnings: RecorderWarning[] }) {
+function RecordedSteps({
+  steps,
+  warnings,
+  suggestions,
+  isSelected,
+  onToggle,
+}: {
+  steps: Step[];
+  warnings: RecorderWarning[];
+  suggestions: RecordedSuggestion[];
+  isSelected: (s: RecordedSuggestion) => boolean;
+  onToggle: (id: string) => void;
+}) {
   const general = warnings.filter((w) => w.stepId === undefined);
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs font-medium text-muted-foreground">{t.recorder.recorded(steps.length)}</p>
+      {suggestions.length > 0 ? <p className="text-xs text-muted-foreground">{t.recorder.suggestedHint}</p> : null}
       <ol className="flex max-h-64 list-decimal flex-col gap-1 overflow-auto rounded-md border border-border bg-muted/40 py-2 pr-2 pl-8 text-sm">
         {steps.map((step) => {
           const own = warnings.filter((w) => w.stepId === step.id);
@@ -172,6 +202,20 @@ function RecordedSteps({ steps, warnings }: { steps: Step[]; warnings: RecorderW
                   <AlertTriangle className="mt-0.5 size-3 shrink-0 text-warning" /> {t.recorder.warnings[w.code]}
                 </span>
               ))}
+              {suggestions
+                .filter((s) => s.stepId === step.id)
+                .map((s) => (
+                  <label key={s.id} className="mt-1 flex items-start gap-2 text-xs">
+                    <input type="checkbox" className="mt-0.5" checked={isSelected(s)} onChange={() => onToggle(s.id)} />
+                    <span>
+                      <ShieldCheck className="mr-1 inline size-3 text-success" />
+                      {t.recorder.suggestion[s.what]}: {suggestionLabel(s)}
+                      {s.kind === 'networkCheck' && !s.selected ? (
+                        <span className="block text-warning">{t.recorder.failedRequest}</span>
+                      ) : null}
+                    </span>
+                  </label>
+                ))}
             </li>
           );
         })}
@@ -190,4 +234,10 @@ function RecordedSteps({ steps, warnings }: { steps: Step[]; warnings: RecorderW
       ) : null}
     </div>
   );
+}
+
+function suggestionLabel(s: RecordedSuggestion): string {
+  if (s.kind === 'step') return s.step.name;
+  const status = s.networkCheck.assertions.find((a) => a.kind === 'statusEquals');
+  return `${s.networkCheck.match.method} ${s.networkCheck.match.pathname} → ${status?.kind === 'statusEquals' ? status.expected : '?'}`;
 }

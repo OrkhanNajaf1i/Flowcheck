@@ -1,5 +1,13 @@
 import { z } from 'zod';
-import { OPTION_SELECTORS, type Step, stepSchema } from './definition.ts';
+import {
+  HTTP_METHODS,
+  type NetworkCheck,
+  networkCheckSchema,
+  networkOriginSchema,
+  OPTION_SELECTORS,
+  type Step,
+  stepSchema,
+} from './definition.ts';
 import { type Locator, locatorSchema } from './locator.ts';
 import { parseTemplate } from './templates.ts';
 
@@ -84,6 +92,16 @@ export const pageEventSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('assertVisible'), ...target }),
   z.strictObject({ kind: z.literal('assertText'), ...target, text: z.string().min(1).max(500) }),
   z.strictObject({ kind: z.literal('unsupported'), clientEventId, what: z.enum(PAGE_UNSUPPORTED) }),
+  /** Something that appeared on the page right after an action (`after`): a suggested check. */
+  z.strictObject({
+    kind: z.literal('observed'),
+    ...target,
+    after: clientEventId,
+    what: z.enum(['dialog', 'message', 'heading']),
+    text: z.string().min(1).max(500).optional(),
+  }),
+  /** The page starts a navigation itself (Navigation API); not stored, tells it apart from the address bar. */
+  z.strictObject({ kind: z.literal('pageNavigation'), clientEventId }),
   /** "Stop recording" in the in-page overlay; not stored as an event. */
   z.strictObject({ kind: z.literal('stop'), clientEventId }),
 ]);
@@ -94,9 +112,39 @@ export const runnerEventSchema = z.discriminatedUnion('kind', [
   /** Navigation the tester made directly (address bar, back), not caused by a recorded action. */
   z.strictObject({ kind: z.literal('navigate'), url: z.string().min(1).max(2000) }),
   z.strictObject({ kind: z.literal('notice'), code: z.enum(RUNNER_NOTICES) }),
+  /** A state-changing request the action sent, with the status it got: a suggested request check. */
+  z.strictObject({
+    kind: z.literal('observedRequest'),
+    after: clientEventId,
+    method: z.enum(HTTP_METHODS),
+    origin: networkOriginSchema,
+    pathname: z.string().min(1).max(500),
+    status: z.number().int().min(100).max(599),
+    /** The JSON response has a top-level "id". */
+    hasId: z.boolean(),
+  }),
+  /** The action led to another page: a suggested address check. */
+  z.strictObject({ kind: z.literal('observedUrl'), after: clientEventId, path: z.string().min(1).max(2000) }),
 ]);
 
-export type RecordedEvent = Exclude<PageEvent, { kind: 'stop' }> | z.infer<typeof runnerEventSchema>;
+export const SUGGESTION_KINDS = ['dialog', 'message', 'heading', 'url', 'request'] as const;
+
+/**
+ * A check suggested from what was observed after an action. The tester reviews every suggestion
+ * before it is added; suggestions built from failing requests (not 2xx) start unselected.
+ */
+export type SuggestedCheck = {
+  what: (typeof SUGGESTION_KINDS)[number];
+  selected: boolean;
+} & ({ kind: 'step'; step: Step } | { kind: 'networkCheck'; networkCheck: NetworkCheck });
+
+export type RecordedSuggestion = SuggestedCheck & {
+  id: string;
+  /** The recorded action step it belongs to. */
+  stepId: string;
+};
+
+export type RecordedEvent = Exclude<PageEvent, { kind: 'stop' | 'pageNavigation' }> | z.infer<typeof runnerEventSchema>;
 
 export interface RecorderWarning {
   code: RecorderWarningCode;
@@ -134,11 +182,18 @@ const sameLocator = (a: Locator | undefined, b: Locator | undefined) => JSON.str
  * - password values become {{secrets.password}} with a warning — the typed value is never stored;
  * - values that would be read as templates ("{{") are left empty with a warning;
  * - unsupported actions and notices become warnings, never silent gaps.
- * Checks are never guessed: only those the tester picked with the overlay's check buttons are added.
+ * - checks the tester picked with the toolbar's check buttons become steps;
+ * - what was observed right after an action becomes suggestions, never steps by themselves.
  */
-export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: string): { steps: Step[]; warnings: RecorderWarning[] } {
+export function buildRecordedSteps(
+  events: readonly RecordedEvent[],
+  startPath: string,
+): { steps: Step[]; warnings: RecorderWarning[]; suggestions: RecordedSuggestion[] } {
   const steps: Step[] = [];
   const warnings: RecorderWarning[] = [];
+  const suggestions: RecordedSuggestion[] = [];
+  /** clientEventId of a recorded action → its step id (observations refer to actions). */
+  const actionSteps = new Map<string, string>();
   let counter = 0;
   const nextId = () => `rec-${++counter}`;
   const warnPage = (code: RecorderWarningCode) => {
@@ -155,13 +210,42 @@ export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: 
     warnStep('bracesInValue', stepId);
     return '';
   };
-  const push = (step: Step) => {
+  const push = (step: Step): boolean => {
     if (steps.length >= MAX_MAIN_STEPS) {
       warnPage('stepLimit');
-      return;
+      return false;
     }
     steps.push(stepSchema.parse(step));
+    return true;
   };
+  const action = (clientEventId: string, step: Step) => {
+    if (push(step)) actionSteps.set(clientEventId, step.id);
+  };
+  const shorten = (text: string) => (text.length > MAX_NAME_TARGET ? `${text.slice(0, MAX_NAME_TARGET - 1)}…` : text);
+  const visibleCheck = (id: string, locator: Locator): Step => ({
+    id,
+    name: `Check "${targetName(locator)}" is shown`,
+    type: 'assertVisible',
+    locator,
+  });
+  const textCheck = (id: string, locator: Locator, text: string): Step => ({
+    id,
+    name: `Check text "${shorten(text)}"`,
+    type: 'assertText',
+    locator,
+    expected: text,
+    mode: 'exact',
+  });
+  let suggestionCounter = 0;
+  const suggest = (stepId: string | undefined, entry: SuggestedCheck) => {
+    if (stepId === undefined) return; // the action was not recorded (e.g. step limit)
+    const key = JSON.stringify(entry.kind === 'step' ? { ...entry.step, id: '' } : { ...entry.networkCheck, id: '' });
+    const same = suggestions.some(
+      (s) => s.stepId === stepId && JSON.stringify(s.kind === 'step' ? { ...s.step, id: '' } : { ...s.networkCheck, id: '' }) === key,
+    );
+    if (!same) suggestions.push({ ...entry, id: `sug-${++suggestionCounter}`, stepId } as RecordedSuggestion);
+  };
+  const requestsByAction = new Map<string, Extract<RecordedEvent, { kind: 'observedRequest' }>[]>();
 
   push({ id: nextId(), name: `Open ${startPath}`, type: 'navigate', url: startPath });
 
@@ -197,13 +281,13 @@ export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: 
       case 'uncheck': {
         const id = nextId();
         const verb = event.kind === 'click' ? 'Click' : event.kind === 'check' ? 'Tick' : 'Untick';
-        push({ id, name: `${verb} "${targetName(event.locator)}"`, type: event.kind, locator: event.locator });
+        action(event.clientEventId, { id, name: `${verb} "${targetName(event.locator)}"`, type: event.kind, locator: event.locator });
         if (event.fragile) warnStep('fragileLocator', id);
         break;
       }
       case 'select': {
         const id = nextId();
-        push({
+        action(event.clientEventId, {
           id,
           name: `Choose "${event.option.value}" in "${targetName(event.locator)}"`.slice(0, 200),
           type: 'selectOption',
@@ -215,7 +299,7 @@ export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: 
       }
       case 'press': {
         const id = nextId();
-        push({
+        action(event.clientEventId, {
           id,
           name: event.locator ? `Press ${event.key} in "${targetName(event.locator)}"` : `Press ${event.key}`,
           type: 'press',
@@ -227,7 +311,7 @@ export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: 
       }
       case 'assertVisible': {
         const id = nextId();
-        push({ id, name: `Check "${targetName(event.locator)}" is shown`, type: 'assertVisible', locator: event.locator });
+        push(visibleCheck(id, event.locator));
         if (event.fragile) warnStep('fragileLocator', id);
         break;
       }
@@ -238,11 +322,42 @@ export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: 
           break;
         }
         const id = nextId();
-        const shown = event.text.length > MAX_NAME_TARGET ? `${event.text.slice(0, MAX_NAME_TARGET - 1)}…` : event.text;
-        push({ id, name: `Check text "${shown}"`, type: 'assertText', locator: event.locator, expected: event.text, mode: 'exact' });
+        push(textCheck(id, event.locator, event.text));
         if (event.fragile) warnStep('fragileLocator', id);
         break;
       }
+      case 'observed': {
+        // Fragile locators are not suggested: a check that breaks on the next build helps nobody.
+        if (event.fragile) break;
+        const stepId = actionSteps.get(event.after);
+        const step =
+          event.what === 'message' && event.text !== undefined && parseTemplate(event.text).ok
+            ? textCheck('', event.locator, event.text)
+            : visibleCheck('', event.locator);
+        suggest(stepId, { kind: 'step', what: event.what, selected: true, step });
+        break;
+      }
+      case 'observedUrl': {
+        const pathname = event.path.split(/[?#]/)[0] ?? '';
+        if (!pathname.startsWith('/') || !parseTemplate(pathname).ok) break;
+        suggest(actionSteps.get(event.after), {
+          kind: 'step',
+          what: 'url',
+          selected: true,
+          step: {
+            id: '',
+            name: `Check page address is ${shorten(pathname)}`,
+            type: 'assertUrl',
+            expected: pathname,
+            match: 'pathname',
+            query: 'ignore',
+          },
+        });
+        break;
+      }
+      case 'observedRequest':
+        requestsByAction.set(event.after, [...(requestsByAction.get(event.after) ?? []), event]);
+        break;
       case 'unsupported':
         warnPage(event.what);
         break;
@@ -251,5 +366,34 @@ export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: 
         break;
     }
   }
-  return { steps, warnings };
+
+  // Request checks: one per distinct request; a request seen twice after the same action would be
+  // ambiguous when run (AMBIGUOUS_NETWORK_MATCH), so it is not suggested. At most 5 per step.
+  let checkCounter = 0;
+  for (const [after, requests] of requestsByAction) {
+    const key = (r: (typeof requests)[number]) => `${r.method} ${JSON.stringify(r.origin)} ${r.pathname}`;
+    const unique = requests.filter((r) => requests.filter((o) => key(o) === key(r)).length === 1);
+    for (const r of unique.slice(0, 5)) {
+      if (!parseTemplate(r.pathname).ok) continue;
+      const ok = r.status >= 200 && r.status < 300;
+      const networkCheck = networkCheckSchema.parse({
+        id: `nc-${++checkCounter}`,
+        name: `${r.method} ${shorten(r.pathname)}`,
+        match: { origin: r.origin, method: r.method, pathname: r.pathname },
+        assertions: [{ kind: 'statusEquals', expected: r.status }, ...(r.hasId ? [{ kind: 'jsonExists', pointer: '/id' }] : [])],
+      });
+      // A failing status seen while recording is probably a bug, not the expectation.
+      suggest(actionSteps.get(after), { kind: 'networkCheck', what: 'request', selected: ok, networkCheck });
+    }
+  }
+
+  // A check the tester already added explicitly is not suggested again.
+  const explicit = new Set(
+    steps.filter((s) => s.type === 'assertVisible' || s.type === 'assertText').map((s) => JSON.stringify(s.locator)),
+  );
+  const kept = suggestions.filter((s) => !(s.kind === 'step' && 'locator' in s.step && explicit.has(JSON.stringify(s.step.locator))));
+  // Suggested steps get ids now, so they never clash with recorded ones.
+  let suggestedStep = 0;
+  for (const s of kept) if (s.kind === 'step') s.step = stepSchema.parse({ ...s.step, id: `rec-check-${++suggestedStep}` });
+  return { steps, warnings, suggestions: kept };
 }

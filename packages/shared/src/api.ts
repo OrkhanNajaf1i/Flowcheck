@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Step } from './definition.ts';
 import type { ErrorCode } from './errors.ts';
-import type { RecorderWarning } from './recorder.ts';
+import type { RecordedSuggestion, RecorderWarning } from './recorder.ts';
 import type { EnvironmentKind, RunStatus, StepPhase, StepStatus } from './status.ts';
 import { environmentKindSchema } from './status.ts';
 import { isValidVariableName } from './templates.ts';
@@ -301,6 +301,8 @@ export interface RecordingDto {
   eventCount: number;
   steps: Step[];
   warnings: RecorderWarning[];
+  /** Checks suggested from what happened after the recorded actions; reviewed before they are added. */
+  suggestions: RecordedSuggestion[];
   createdAt: string;
   finishedAt: string | null;
 }

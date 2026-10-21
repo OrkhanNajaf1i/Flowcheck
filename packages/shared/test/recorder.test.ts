@@ -125,3 +125,79 @@ describe('checks picked by the tester', () => {
     expect(warnings).toEqual([{ code: 'bracesInValue', count: 1 }]);
   });
 });
+
+describe('suggested checks', () => {
+  const create = { kind: 'role', role: 'button', name: 'Create new' } as const;
+  const dialog = { kind: 'role', role: 'dialog', name: 'New item' } as const;
+
+  it('turn what appeared after an action into reviewable checks for that step', () => {
+    const clickId = uuid(++n);
+    const { steps, suggestions } = buildRecordedSteps(
+      [
+        { kind: 'click', clientEventId: clickId, locator: create, fragile: false },
+        { kind: 'observed', clientEventId: uuid(++n), after: clickId, what: 'dialog', locator: dialog, fragile: false },
+        {
+          kind: 'observed',
+          clientEventId: uuid(++n),
+          after: clickId,
+          what: 'message',
+          locator: { kind: 'testId', value: 'toast' },
+          fragile: false,
+          text: 'Saved',
+        },
+        { kind: 'observedUrl', after: clickId, path: '/items/new?x=1' },
+        { kind: 'observedRequest', after: clickId, method: 'POST', origin: 'api', pathname: '/api/items', status: 201, hasId: true },
+      ],
+      '/',
+    );
+    expect(steps.map((s) => s.type)).toEqual(['navigate', 'click']);
+    const clickStep = steps[1]?.id;
+    expect(suggestions.map((s) => [s.stepId, s.what, s.selected])).toEqual([
+      [clickStep, 'dialog', true],
+      [clickStep, 'message', true],
+      [clickStep, 'url', true],
+      [clickStep, 'request', true],
+    ]);
+    expect(suggestions[0]).toMatchObject({ kind: 'step', step: { type: 'assertVisible', locator: dialog } });
+    expect(suggestions[1]).toMatchObject({ kind: 'step', step: { type: 'assertText', expected: 'Saved', mode: 'exact' } });
+    expect(suggestions[2]).toMatchObject({ kind: 'step', step: { type: 'assertUrl', expected: '/items/new', match: 'pathname' } });
+    expect(suggestions[3]).toMatchObject({
+      kind: 'networkCheck',
+      networkCheck: {
+        match: { origin: 'api', method: 'POST', pathname: '/api/items' },
+        assertions: [
+          { kind: 'statusEquals', expected: 201 },
+          { kind: 'jsonExists', pointer: '/id' },
+        ],
+      },
+    });
+    // Suggested steps have their own ids.
+    const ids = suggestions.flatMap((s) => (s.kind === 'step' ? [s.step.id] : []));
+    expect(new Set([...ids, ...steps.map((s) => s.id)]).size).toBe(ids.length + steps.length);
+  });
+
+  it('leave a failing request unselected, drop duplicate requests and fragile or already-checked elements', () => {
+    const clickId = uuid(++n);
+    const request = { kind: 'observedRequest', after: clickId, method: 'POST', origin: 'frontend', status: 200, hasId: false } as const;
+    const { suggestions } = buildRecordedSteps(
+      [
+        { kind: 'click', clientEventId: clickId, locator: create, fragile: false },
+        { ...request, pathname: '/api/orders', status: 500 },
+        { ...request, pathname: '/api/log' },
+        { ...request, pathname: '/api/log' },
+        {
+          kind: 'observed',
+          clientEventId: uuid(++n),
+          after: clickId,
+          what: 'heading',
+          locator: { kind: 'css', value: 'div > h2' },
+          fragile: true,
+        },
+        { kind: 'observed', clientEventId: uuid(++n), after: clickId, what: 'dialog', locator: dialog, fragile: false },
+        { kind: 'assertVisible', clientEventId: uuid(++n), locator: dialog, fragile: false },
+      ],
+      '/',
+    );
+    expect(suggestions.map((s) => [s.what, s.selected])).toEqual([['request', false]]);
+  });
+});

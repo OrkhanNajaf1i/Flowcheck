@@ -1,7 +1,7 @@
 import type { RecordingDto } from '@flowcheck/shared';
 import { type Browser, chromium, expect, type Page, test } from '@playwright/test';
 import { RECORDER_CDP_PORT } from '../playwright.config.ts';
-import { api, createProjectWithEnv, createTest, definition, SERVER, startRun, waitForRun } from './helpers.ts';
+import { api, createProjectWithEnv, createTest, DEMO, definition, SERVER, setDemoMode, startRun, waitForRun } from './helpers.ts';
 
 /**
  * Recorder acceptance tests (PROJECT_RULES §8, §20 criteria 4, 24, 29). The runner opens the
@@ -289,4 +289,103 @@ test('UI: steps are recorded from the editor, reviewed and added to the test as 
   const revision = await api('GET', `/test-cases/${testCaseId}`);
   const saved = await api('GET', `/revisions/${revision.body.currentRevisionId}`);
   expect(saved.body.definition.steps.map((s: { type: string }) => s.type)).toEqual(['navigate', 'click']);
+});
+
+/** What the editor does with the default selection: request checks on the step, check steps after it. */
+function withSuggestions(recording: RecordingDto) {
+  const steps = [];
+  for (const step of recording.steps) {
+    const mine = recording.suggestions.filter((s) => s.stepId === step.id && s.selected);
+    const checks = mine.flatMap((s) => (s.kind === 'networkCheck' ? [s.networkCheck] : []));
+    steps.push(checks.length > 0 ? { ...step, networkChecks: checks } : step);
+    for (const s of mine) if (s.kind === 'step') steps.push(s.step);
+  }
+  return steps;
+}
+
+test('suggests checks from what each action did; accepted as suggested they catch the create-order-500 bug', async () => {
+  await setDemoMode('success');
+  const { projectId, envId } = await createProjectWithEnv();
+  const { id, browser, page } = await startRecording(projectId, envId, '/');
+  await page.getByTestId('add-to-cart-p-1').click();
+  await page.waitForTimeout(1500);
+  await page.goto(`${DEMO}/cart`);
+  await page.getByRole('button', { name: 'Place order' }).click();
+  await expect(page.getByTestId('order-success')).toBeVisible();
+  await page.waitForTimeout(1500);
+  const recording = await stop(id, browser);
+  // Opening /cart from the address bar is the tester's own navigation: an "Open" step, not a check.
+  expect(recording.steps.map((s) => s.type)).toEqual(['navigate', 'click', 'navigate', 'click']);
+
+  const describe = (s: RecordingDto['suggestions'][number]) =>
+    s.kind === 'step'
+      ? `${s.what} ${s.step.type} ${JSON.stringify('locator' in s.step ? s.step.locator : null)}`
+      : `${s.what} ${s.networkCheck.match.method} ${s.networkCheck.match.pathname} ${JSON.stringify(s.networkCheck.assertions)}`;
+  expect(recording.suggestions.map(describe)).toEqual([
+    'message assertText {"kind":"testId","value":"add-status"}',
+    'message assertVisible {"kind":"testId","value":"order-success"}',
+    'request POST /api/cart/items [{"kind":"statusEquals","expected":201}]',
+    'request POST /api/orders [{"kind":"statusEquals","expected":201},{"kind":"jsonExists","pointer":"/id"}]',
+  ]);
+  expect(recording.suggestions.every((s) => s.selected)).toBe(true);
+
+  const { testCaseId } = await createTest(projectId, definition(withSuggestions(recording)));
+  const passed = await waitForRun(await startRun(testCaseId, envId));
+  expect(passed.status, JSON.stringify(passed.steps)).toBe('passed');
+
+  await setDemoMode('create-order-500');
+  const failed = await waitForRun(await startRun(testCaseId, envId));
+  expect(failed.status).toBe('failed');
+  expect(failed.failureSummary?.code).toBe('ASSERTION_FAILED');
+  await setDemoMode('success');
+});
+
+test('suggests "window opened" for a dialog and the page address after a navigation', async () => {
+  const { projectId, envId } = await createProjectWithEnv();
+  const { id, browser, page } = await startRecording(projectId, envId, '/spa');
+  await page.getByRole('button', { name: 'Create new' }).click();
+  await page.waitForTimeout(1500);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.waitForTimeout(1500);
+  const recording = await stop(id, browser);
+  expect(recording.suggestions.map((s) => (s.kind === 'step' ? `${s.what}:${s.step.type}` : s.what))).toEqual([
+    'dialog:assertVisible',
+    'url:assertUrl',
+    'heading:assertVisible',
+  ]);
+  expect(recording.suggestions[0]).toMatchObject({ step: { locator: { kind: 'role', role: 'dialog', name: 'New item' } } });
+  expect(recording.suggestions[1]).toMatchObject({ step: { expected: '/spa/settings' } });
+
+  const { testCaseId } = await createTest(projectId, definition(withSuggestions(recording)));
+  const run = await waitForRun(await startRun(testCaseId, envId));
+  expect(run.status, JSON.stringify(run.steps)).toBe('passed');
+});
+
+test('UI: suggested checks are shown ticked under their step and added with the steps', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(projectId, definition([{ id: 'open', name: 'Open app', type: 'navigate', url: '/spa' }]));
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await page.getByTestId('phase-steps').getByRole('button', { name: 'Record steps' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Start at').fill('/spa');
+  const created = page.waitForResponse((r) => r.url().endsWith('/recordings') && r.request().method() === 'POST');
+  await dialog.getByRole('button', { name: 'Open browser and record' }).click();
+  const recordingId = ((await (await created).json()) as RecordingDto).id;
+  open = recordingId;
+  await expect(dialog.getByTestId('recording-status')).toContainText('Recording.', { timeout: 20_000 });
+
+  const { browser, page: tester } = await attach(recordingId, '/spa');
+  await tester.getByRole('button', { name: 'Create new' }).click();
+  const suggestion = dialog.getByLabel(/Window opened: Check "New item" is shown/);
+  await expect(suggestion).toBeChecked({ timeout: 10_000 });
+  await dialog.getByRole('button', { name: 'Stop recording' }).click();
+  await expect(dialog.getByTestId('recording-status')).toContainText('Recording finished', { timeout: 20_000 });
+  await browser.close().catch(() => undefined);
+
+  await dialog.getByRole('button', { name: 'Add 2 steps to the test' }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  const testCase = await api('GET', `/test-cases/${testCaseId}`);
+  const saved = await api('GET', `/revisions/${testCase.body.currentRevisionId}`);
+  expect(saved.body.definition.steps.map((s: { type: string }) => s.type)).toEqual(['navigate', 'click', 'assertVisible']);
 });
