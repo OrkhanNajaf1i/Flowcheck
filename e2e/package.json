@@ -1,0 +1,15 @@
+{
+  "name": "@flowcheck/e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "e2e": "pnpm --filter @flowcheck/web build && playwright test"
+  },
+  "dependencies": {
+    "@flowcheck/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1"
+  }
+}

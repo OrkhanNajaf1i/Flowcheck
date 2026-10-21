@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cart - Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem}[hidden]{display:none}</style>
+</head>
+<body>
+  <header><h1>Your cart</h1><nav><a href="/">Back to products</a></nav></header>
+  <main>
+    <ul id="items" data-testid="cart-items"></ul>
+    <p data-testid="cart-empty" hidden>Your cart is empty</p>
+    <button type="button" data-testid="place-order" hidden>Place order</button>
+    <p role="status" data-testid="order-success" hidden></p>
+    <p role="alert" data-testid="order-error" hidden></p>
+  </main>
+  <script type="module">
+    const items = document.getElementById('items');
+    const empty = document.querySelector('[data-testid="cart-empty"]');
+    const place = document.querySelector('[data-testid="place-order"]');
+    const success = document.querySelector('[data-testid="order-success"]');
+    const failure = document.querySelector('[data-testid="order-error"]');
+    async function render() {
+      const cart = await (await fetch('/api/cart')).json();
+      items.replaceChildren(...cart.items.map((i) => {
+        const li = document.createElement('li');
+        li.dataset.testid = `cart-item-${i.productId}`;
+        li.textContent = `${i.productId} x ${i.quantity}`;
+        return li;
+      }));
+      empty.hidden = cart.items.length > 0;
+      place.hidden = cart.items.length === 0;
+    }
+    place.addEventListener('click', async () => {
+      place.disabled = true;
+      failure.hidden = true;
+      const res = await fetch('/api/orders', { method: 'POST' });
+      if (res.status === 201) {
+        const order = await res.json();
+        success.textContent = `Order ${order.id} created`;
+        success.dataset.orderId = order.id;
+        success.hidden = false;
+      } else {
+        failure.textContent = 'Could not create order';
+        failure.hidden = false;
+      }
+      place.disabled = false;
+      await render();
+    });
+    await render();
+  </script>
+</body>
+</html>

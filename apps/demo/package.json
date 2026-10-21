@@ -1,0 +1,18 @@
+{
+  "name": "@flowcheck/demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --watch src/main.ts",
+    "start": "node --env-file-if-exists=../../.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "fastify": "5.12.7",
+    "@fastify/cookie": "11.1.3"
+  },
+  "devDependencies": {
+    "vitest": "5.0.5"
+  }
+}

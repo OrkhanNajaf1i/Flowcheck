@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Signed up - Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:520px;margin:2rem auto;padding:0 1rem}</style>
+</head>
+<body>
+  <h1 data-testid="thanks">Thanks!</h1>
+  <p data-testid="summary"></p>
+  <script type="module">
+    const params = new URLSearchParams(location.search);
+    document.querySelector('[data-testid="thanks"]').textContent = `Thanks, ${params.get('name') ?? ''}!`;
+    document.querySelector('[data-testid="summary"]').textContent = `Country: ${params.get('country') ?? ''}`;
+  </script>
+</body>
+</html>

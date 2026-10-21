@@ -1,0 +1,35 @@
+{
+  "name": "flowcheck",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=24.11 <25"
+  },
+  "scripts": {
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "db:generate": "pnpm --filter @flowcheck/db generate",
+    "db:migrate": "pnpm --filter @flowcheck/db migrate",
+    "dev:demo": "pnpm --filter @flowcheck/demo dev",
+    "e2e": "pnpm --filter @flowcheck/e2e e2e",
+    "playwright:install": "pnpm --filter @flowcheck/runner exec playwright install chromium",
+    "check": "biome check . && turbo run typecheck test",
+    "start:server": "pnpm --filter @flowcheck/server start",
+    "start:runner": "pnpm --filter @flowcheck/runner start",
+    "start:demo": "pnpm --filter @flowcheck/demo start",
+    "start": "node scripts/run.ts start",
+    "start:with-demo": "node scripts/run.ts start --demo",
+    "dev": "node scripts/run.ts dev",
+    "dev:with-demo": "node scripts/run.ts dev --demo",
+    "build:web": "pnpm --filter @flowcheck/web build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "24.19.2",
+    "turbo": "2.11.9",
+    "typescript": "5.9.3"
+  }
+}

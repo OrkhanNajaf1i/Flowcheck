@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Order - Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem}</style>
+</head>
+<body>
+  <h1>Order details</h1>
+  <p data-testid="order-details">Loading...</p>
+  <script type="module">
+    const id = new URLSearchParams(location.search).get('id') ?? '';
+    const out = document.querySelector('[data-testid="order-details"]');
+    const res = await fetch(`/api/orders/${encodeURIComponent(id)}`);
+    out.textContent = res.ok ? `Order ${id}: ${(await res.json()).items.length} item(s)` : 'Order not found';
+  </script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "name": "@flowcheck/runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env --watch src/main.ts",
+    "start": "node --env-file-if-exists=../../.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@flowcheck/shared": "workspace:*",
+    "@flowcheck/db": "workspace:*",
+    "@flowcheck/test-engine": "workspace:*",
+    "playwright": "1.64.1",
+    "pino": "10.4.0"
+  },
+  "devDependencies": {
+    "vitest": "5.0.5"
+  }
+}
