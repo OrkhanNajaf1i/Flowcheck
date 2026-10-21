@@ -22,6 +22,7 @@ import {
 import { allSteps, type FailureSummary, type FinalRunStatus, parseDefinition, referencedSecrets, resolveInputs } from '@flowcheck/shared';
 import {
   type AbortReason,
+  CANCEL_CLEANUP_MS,
   computeRunStatus,
   effectiveRunTimeout,
   runDefinition,
@@ -145,7 +146,9 @@ async function execute(
       if (cancellationRequestedAt !== null && !abort.signal.aborted) {
         log.info('cancellation requested');
         abortWith({ kind: 'cancelled' });
-        graceTimer = setTimeout(forceClose, config.cancelGraceMs);
+        // The engine stops the running step after the grace period and then runs cleanup (best
+        // effort, CANCEL_CLEANUP_MS). Closing the context is only the last resort if that hangs.
+        graceTimer = setTimeout(forceClose, config.cancelGraceMs + CANCEL_CLEANUP_MS + 10_000);
       }
     } catch (error) {
       log.error({ err: error }, 'heartbeat failed');
@@ -183,6 +186,7 @@ async function execute(
     const result = await runDefinition({
       context,
       guard,
+      cancelGraceMs: config.cancelGraceMs,
       definition,
       environment: run.environmentSnapshot,
       inputs: inputs.values,
@@ -252,7 +256,12 @@ async function execute(
 }
 
 function summarize(status: FinalRunStatus, result: Awaited<ReturnType<typeof runDefinition>>): FailureSummary | null {
-  if (status === 'passed' || status === 'cancelled') return null;
+  if (status === 'cancelled') {
+    return result.cleanupAfterCancelComplete === false
+      ? { code: 'CLEANUP_INCOMPLETE', message: 'The run was cancelled and its cleanup did not complete; test data may remain' }
+      : null;
+  }
+  if (status === 'passed') return null;
   if (result.abort?.kind === 'interrupted') return { code: result.abort.code, message: interruptMessage(result.abort.code) };
   if (result.primaryFailure) return result.primaryFailure;
   return { code: 'INTERNAL_ERROR', message: 'The run did not complete all required steps' };

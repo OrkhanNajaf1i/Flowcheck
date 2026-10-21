@@ -539,6 +539,8 @@ export const az: Dict = {
     noSteps: 'Heç bir addım qeydə alınmayıb.',
     phases: { setup: 'əvvəl', main: 'test', cleanup: 'təmizləmə' },
     hints: {
+      CLEANUP_INCOMPLETE:
+        'Aşağıdakı cleanup addımlarına baxın: keçməyənlər test datasını geridə qoyub. Onu əl ilə silin və ya testi yenidən işlədin ki, cleanup tamamlansın.',
       LOCATOR_NOT_FOUND:
         'Ekran görüntüsünü addımla müqayisə edin: mətn dəqiq eynidirmi (böyük hərflər, boşluqlar)? Səhifə tam yüklənibmi, yoxsa başqa şey göstərir (xəta, cookie pəncərəsi, login səhifəsi)?',
       AMBIGUOUS_LOCATOR:

@@ -237,3 +237,77 @@ test.describe('phase 1 vertical slice', () => {
     expect(JSON.stringify(res.body.error.details)).toContain('undeclared input');
   });
 });
+
+test.describe('cleanup after cancel', () => {
+  const createOrder = [
+    {
+      id: 'cart',
+      name: 'Add to cart',
+      type: 'apiRequest',
+      method: 'POST',
+      path: '/cart/items',
+      body: { productId: 'p-1', quantity: 1 },
+      auth: { kind: 'browserCookies' },
+      assertions: [{ kind: 'statusEquals', expected: 201 }],
+    },
+    {
+      id: 'order',
+      name: 'Create order',
+      type: 'apiRequest',
+      method: 'POST',
+      path: '/orders',
+      auth: { kind: 'browserCookies' },
+      assertions: [{ kind: 'statusEquals', expected: 201 }],
+      outputs: [{ name: 'orderId', from: 'json', pointer: '/id' }],
+    },
+    { id: 'open', name: 'Open shop', type: 'navigate', url: '/' },
+    { id: 'wait', name: 'Never appears', type: 'assertVisible', locator: { kind: 'testId', value: 'does-not-exist' }, timeoutMs: 60_000 },
+  ];
+  const deleteOrder = (expected: number) => ({
+    id: 'delete',
+    name: 'Delete the test order',
+    type: 'apiRequest',
+    method: 'DELETE',
+    path: '/orders/{{outputs.orderId}}',
+    assertions: [{ kind: 'statusEquals', expected }],
+  });
+
+  async function cancelWhileWaiting(def: unknown) {
+    await setDemoMode('success');
+    const { projectId, envId } = await createProjectWithEnv();
+    const { testCaseId } = await createTest(projectId, def);
+    const runId = await startRun(testCaseId, envId);
+    await expect
+      .poll(async () => (await api('GET', `/runs/${runId}`)).body.steps.find((s: { stepId: string }) => s.stepId === 'wait')?.status, {
+        timeout: 20_000,
+      })
+      .toBe('running');
+    expect((await api('POST', `/runs/${runId}/cancel`)).status).toBe(202);
+    return waitForRun(runId, 40_000);
+  }
+
+  test('runs the cleanup steps on a fresh page after the running step is stopped', async () => {
+    const run = await cancelWhileWaiting(
+      definition(createOrder, {
+        cleanupSteps: [{ id: 'cart-page', name: 'Open the cart', type: 'navigate', url: '/cart' }, deleteOrder(204)],
+      }),
+    );
+    expect(run.status).toBe('cancelled');
+    expect(stepStatuses(run)).toEqual([
+      'cart:passed',
+      'order:passed',
+      'open:passed',
+      'wait:cancelled',
+      'cart-page:passed',
+      'delete:passed',
+    ]);
+    expect(run.failureSummary).toBeNull();
+  });
+
+  test('reports CLEANUP_INCOMPLETE when the cleanup after a cancel does not pass', async () => {
+    const run = await cancelWhileWaiting(definition(createOrder, { cleanupSteps: [deleteOrder(200)] }));
+    expect(run.status).toBe('cancelled');
+    expect(run.steps.find((s) => s.stepId === 'delete')?.status).toBe('failed');
+    expect(run.failureSummary?.code).toBe('CLEANUP_INCOMPLETE');
+  });
+});

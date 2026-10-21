@@ -118,6 +118,10 @@ Encrypted secrets per project (API + "Secrets" tab), `{{secrets.name}}` in fill 
 
 "Record steps" in the editor's main steps: the runner opens a visible browser (target guard, service workers blocked, 30 min limit) with a recorder script and an in-page "Stop" overlay. Recorded: click, typing (one fill per field, last value; flushed before any other action and on stop), choose from list, tick/untick, Enter/Tab/Escape, direct navigation (not the result of a recorded action, 3 s window); SPA route changes do not add steps. Only trusted events are recorded; the runner validates every event with Zod and stores it with `sequence` assigned in the same transaction, duplicates by `clientEventId` are ignored. Locators: test id → data-* → role + Chromium's own accessible name → label → placeholder → name → alt/title → text → id, each checked to match exactly one element on the page; an ambiguous role/text is scoped to a container with a stable handle; otherwise a CSS path marked fragile. Password values are never sent (draft uses `{{secrets.password}}` + warning). Frames, shadow DOM, popups, file inputs, drag and drop, unsupported fields → warnings. The draft is derived from the events on every read and only becomes a revision when the tester saves. Evidence: shared (draft building, event schema), db (sequence, duplicates, lock, stop, orphans, project delete), server (start/stop/lock/start path), e2e (`recorder.spec.ts`, 8 tests: criteria 4, 24, 29, password, SPA, scoping, overlay Stop, UI flow).
 
+## Cleanup after cancel — done
+
+A cancelled run stops its running step after the 5 s grace period by closing only that page (cookies stay), then runs the cleanup steps on a fresh page within 15 s in total. A cleanup step with a missing variable is skipped (its data was never created). If cleanup does not fully pass, the run stays `cancelled` with `CLEANUP_INCOMPLETE` and a hint on the run page. Timeouts and shutdowns still skip cleanup. Evidence: e2e (cancel while waiting → UI and API cleanup steps pass on a fresh page; a failing cleanup → `CLEANUP_INCOMPLETE`; the existing cancel test unchanged).
+
 ## Recorder: suggested checks — done
 
 After each recorded action the recorder observes what changed and suggests checks: a newly shown dialog, message or heading (1.2 s window, compared before/after), the page reached as a result, and state-changing fetch/XHR requests within 3 s with their status (`statusEquals`, plus `jsonExists /id` when the JSON has one). The record dialog lists them ticked under their step (non-2xx unticked); "Add" attaches request checks to the step and inserts check steps after it. Not suggested: fragile locators, texts with changing numbers (visibility instead), paths with ids, requests seen twice. Direct navigations are now told apart with the Navigation API (fixes a URL opened from the address bar right after an action being taken for its result). Evidence: shared (suggestion building, filters), web (`applySuggestions`), e2e: recorded shop flow + accepted suggestions passes in success mode and fails with `ASSERTION_FAILED` in create-order-500; dialog/address/heading suggestions replay and pass; UI shows ticked suggestions and saves them.
@@ -140,9 +144,9 @@ Optional per page step (`screenshot: true`, editor: step → Advanced settings):
 
 ## Not done yet (next phases)
 
-- **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.
+- **Phase 2 leftovers:** revision diff view.
 - Nothing from phases 1–5 is open except the phase 2 leftovers above.
 
 ## Next concrete task
 
-Phase 2 leftovers: best-effort cleanup after cancel, then the revision diff view.
+Phase 2 leftover: revision diff view (compare two revisions of a test step by step).

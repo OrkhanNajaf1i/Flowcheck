@@ -539,6 +539,8 @@ export const en = {
     noSteps: 'No steps were recorded.',
     phases: { setup: 'before', main: 'test', cleanup: 'cleanup' },
     hints: {
+      CLEANUP_INCOMPLETE:
+        'Look at the cleanup steps below: the ones that did not pass left their test data behind. Remove it by hand or run the test again so its cleanup can finish.',
       LOCATOR_NOT_FOUND:
         'Compare the screenshot with your step: is the text exactly the same (capital letters, spaces)? Did the page finish loading or show something else (error, cookie banner, login page)?',
       AMBIGUOUS_LOCATOR:

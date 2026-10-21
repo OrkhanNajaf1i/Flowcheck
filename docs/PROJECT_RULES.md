@@ -605,6 +605,7 @@ Nümunə: gözlənilən mətn yoxdur → failed; API 201 əvəzinə 500 → fail
 - Grace period: [TÖVSİYƏ] **5 saniyə**; sonra context/browser məcburi bağlanır.
 - Cleanup best-effort-dir; [TÖVSİYƏ] cancel-dan sonra cleanup üçün ayrıca **15 saniyə** limit.
 - Cleanup uğursuz olsa belə status `cancelled`; hesabatda "cleanup tamamlanmadı, test datası qala bilər".
+- [DÜZƏLİŞ #55] İmplementasiya: grace bitəndə **context yox, yalnız səhifə** bağlanır (cookie-lər və login qalır); cleanup addımları yeni səhifədə, cəmi 15 s büdcə ilə işləyir; hər addımın deadline-ı bu büdcə ilə məhdudlaşır. Dəyişəni olmayan cleanup addımı (data heç yaranmayıb) uğursuzluq sayılmır. Cleanup tam keçməsə `failureSummary` = `CLEANUP_INCOMPLETE` (status yenə `cancelled`). Timeout və shutdown-da (`interrupted`) cleanup işləmir. Runner context-i yalnız son çarə kimi (grace + 15 s + 10 s) məcburi bağlayır.
 - Cancel idempotentdir (təkrar çağırış eyni nəticə, 200/202).
 - Brauzer prosesi açıq qalmamalıdır (finally blokunda `browser.close()`; runner çıxışında bütün browser-lər bağlanır).
 
@@ -806,6 +807,7 @@ Validation həm frontend, həm backend-də (eyni Zod schema). Backend yeganə et
 | `NOT_FOUND` | **[DÜZƏLİŞ]** API resursu yoxdur |
 | `EXECUTION_LOCK_BUSY` | **[DÜZƏLİŞ]** §13 lock |
 | `PROJECT_HAS_ACTIVE_RUNS` | **[DÜZƏLİŞ]** növbədə/işləyən run olan layihə silinmir (409) |
+| `CLEANUP_INCOMPLETE` | **[DÜZƏLİŞ #55]** run ləğv edildi, cleanup tamamlanmadı — test datası qala bilər (yalnız `failureSummary`-də) |
 | `REVISION_CONFLICT` | **[DÜZƏLİŞ]** optimistic concurrency |
 | `UNSUPPORTED_SCHEMA_VERSION` | **[DÜZƏLİŞ]** §5 köhnə revision |
 | `AUTH_PROFILE_ENVIRONMENT_MISMATCH` | **[DÜZƏLİŞ]** §12 |
@@ -959,6 +961,7 @@ Hər mərhələnin sonunda hesabat:
 | 39 | §6 | Addım növlərini istifadəçinin özünün yaratması təklif olundu | **Qərar:** addım növləri statik (engine kodu) qalır — istifadəçi tərəfindən yaradılan növ ixtiyari kod icrası olardı (§6 qadağası) və nəticənin etibarlılığını pozardı. İstifadəçi addımları (instance) sərbəst yaradır. Gələcək ideya: təkrar istifadə olunan **addım qrupları** (məs. "Login" bir dəfə yaradılıb bir neçə testdə istifadə) |
 | 40 | §6 | `assertText`/`assertValue`/`assertEnabled` son oxunuşda ~1 ms timeout alıb `INTERNAL_ERROR` verirdi (e2e tam suite-də aşkarlandı) | Oxunuşa minimum 500 ms; deadline-dan sonrakı timeout son müşahidə ilə `ASSERTION_FAILED` sayılır |
 | 46 | §11/§16 | Secret sayt tərəfindən URL-ə yazılanda (məs. `/done?name=<secret>`) addım sübutundakı `url` sahəsi açıq qalırdı | Redaksiya mərkəzləşdirildi: engine hər addımın bütün `expected`/`actual`-ını və xəta mesajını saxlamadan əvvəl məlum secret dəyərlərindən (düz, URL-encoded, base64) təmizləyir. Login şablonu parolu `{{secrets.testPassword}}`-dən oxuyur |
+| 55 | §13/§18 | Cancel-dan sonra cleanup işləmirdi (context 5 s sonra bağlanırdı); "cleanup tamamlanmadı" xəbərdarlığının kodu yox idi | Grace-dən sonra yalnız səhifə bağlanır, cleanup yeni səhifədə 15 s büdcə ilə; `CLEANUP_INCOMPLETE`; §13 [DÜZƏLİŞ #55] |
 | 54 | §8 | Tester hansı yoxlamaları əlavə etməli olduğunu bilmirdi; ünvan sətrindən 3 s ərzində edilən keçid itirdi və hərəkətin nəticəsi sayılırdı | Hərəkətdən sonra müşahidə olunanlardan təklif olunan yoxlamalar (baxışla, 2xx olmayan işarəsiz); birbaşa naviqasiya Navigation API ilə; §8 [DÜZƏLİŞ #54] |
 | 53 | §17 | "Hər redirect hop route-dan keçir" yanlış idi: Playwright route redirect hop-larını göstərmir; e2e icazəsiz origin-ə redirect-in izlənildiyini aşkar etdi | Brauzer trafiki üçün lokal yoxlayıcı proxy (bütün hop-lar, CONNECT, yoxlanmış IP-yə qoşulma); qəbul testləri 23, 26, 31 əlavə edildi |
 | 52 | §16 | Retention qaydası var idi, mexanizm yox | Yaş + layihə kvotası, aktiv run-lara toxunulmur, 6 saatdan bir; §16 [DÜZƏLİŞ #52] |

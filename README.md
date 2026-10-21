@@ -56,7 +56,7 @@ The UI is available in English and Azerbaijani (language switch in the top-right
 | `passed` | All setup and main steps passed |
 | `failed` | An expectation was not met — e.g. assertion, missing or ambiguous element, unreachable or blocked target |
 | `error` | FlowCheck could not evaluate the test reliably (internal error, browser crash, invalid stored test) |
-| `cancelled` | Stopped by you; cleanup is not guaranteed and test data may remain |
+| `cancelled` | Stopped by you. The running step gets 5 s, then cleanup steps still run (best effort, 15 s in total). If cleanup does not fully pass, the run shows `CLEANUP_INCOMPLETE`: test data may remain |
 | `interrupted` | Stopped before completion: runner stopped or run timeout reached. Never re-run automatically |
 
 HTTP 4xx/5xx is not a failure by itself — a test expecting `403` passes when it gets `403`. After the first failed main step, the remaining main steps are `skipped`; cleanup steps still run.

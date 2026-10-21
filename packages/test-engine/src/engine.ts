@@ -57,7 +57,12 @@ export interface RunDefinitionOptions {
   reporter: EngineReporter;
   /** Aborted by the runner; `signal.reason` is an AbortReason. */
   signal: AbortSignal;
+  /** After a cancel, the running step gets this long before its page is closed (default 5 s). */
+  cancelGraceMs?: number;
 }
+
+/** Time cleanup steps get after a cancel, in total (PROJECT_RULES §13, best effort). */
+export const CANCEL_CLEANUP_MS = 15_000;
 
 export interface RunDefinitionResult {
   steps: StepOutcome[];
@@ -65,6 +70,8 @@ export interface RunDefinitionResult {
   /** First failure in setup or main; cleanup never overwrites it. */
   primaryFailure: { stepId: string; code: ErrorCode; message: string } | null;
   browserCrashed: boolean;
+  /** After a cancel: whether every cleanup step passed (null when not cancelled or no cleanup). */
+  cleanupAfterCancelComplete: boolean | null;
 }
 
 /**
@@ -72,6 +79,9 @@ export interface RunDefinitionResult {
  * - A setup failure skips the rest of setup and all main steps; cleanup still runs.
  * - The first main failure skips the remaining main steps; cleanup still runs.
  * - A cleanup step whose variables are missing is skipped with a visible reason.
+ * - Cancel: remaining setup/main steps are cancelled; a running step gets a grace period, then its
+ *   page is closed (the context and its cookies stay). Cleanup still runs, best effort, on a fresh
+ *   page within CANCEL_CLEANUP_MS. Timeouts and shutdowns skip cleanup.
  */
 export async function runDefinition(options: RunDefinitionOptions): Promise<RunDefinitionResult> {
   const { context, definition, environment, reporter, signal } = options;
@@ -90,10 +100,28 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
   await options.guard.install(context);
   const blocked = options.guard.blocked;
   let browserCrashed = false;
-  const page: Page = await context.newPage();
-  page.on('crash', () => {
-    browserCrashed = true;
-  });
+  const openPage = async () => {
+    const created = await context.newPage();
+    created.on('crash', () => {
+      browserCrashed = true;
+    });
+    return created;
+  };
+  let page: Page = await openPage();
+
+  // A step that ignores the cancel is stopped by closing its page after the grace period.
+  let stepRunning = false;
+  let graceTimer: NodeJS.Timeout | undefined;
+  signal.addEventListener(
+    'abort',
+    () => {
+      if ((signal.reason as AbortReason).kind !== 'cancelled') return;
+      graceTimer = setTimeout(() => {
+        if (stepRunning) void page.close().catch(() => undefined);
+      }, options.cancelGraceMs ?? 5_000);
+    },
+    { once: true },
+  );
 
   const refs: StepRef[] = [];
   for (const [phase, steps] of [
@@ -110,12 +138,33 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
 
   const abortReason = (): AbortReason | null => (signal.aborted ? (signal.reason as AbortReason) : null);
 
+  let cleanupDeadline: number | null = null;
+  const cancelledCleanup: StepReport['status'][] = [];
+
   for (const ref of refs) {
     const abort = abortReason();
-    if (abort) {
+    const cleanupAfterCancel = abort?.kind === 'cancelled' && ref.phase === 'cleanup';
+    if (abort && !cleanupAfterCancel) {
       const status = abort.kind === 'cancelled' ? 'cancelled' : 'interrupted';
       await finish(ref, skipped(status, abort.kind === 'cancelled' ? 'Run was cancelled' : 'Run was interrupted'));
       continue;
+    }
+    if (cleanupAfterCancel) {
+      cleanupDeadline ??= Date.now() + CANCEL_CLEANUP_MS;
+      if (Date.now() >= cleanupDeadline) {
+        cancelledCleanup.push('skipped');
+        await finish(ref, skipped('skipped', 'Cleanup after cancel ran out of time (15 s); test data may remain'));
+        continue;
+      }
+      if (page.isClosed()) {
+        try {
+          page = await openPage();
+        } catch {
+          cancelledCleanup.push('error');
+          await finish(ref, skipped('skipped', 'Cleanup after cancel could not open a page; test data may remain'));
+          continue;
+        }
+      }
     }
     if (ref.phase !== 'cleanup' && blockReason) {
       await finish(ref, skipped('skipped', blockReason));
@@ -124,7 +173,11 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
 
     const startedAt = new Date();
     await reporter.stepStarted(ref, startedAt);
-    const report = await executeOne(ref, startedAt);
+    stepRunning = true;
+    const report = await executeOne(ref, startedAt, cleanupAfterCancel ? cleanupDeadline : null);
+    stepRunning = false;
+    // Skipped for a missing variable: the data it would delete was never created.
+    if (cleanupAfterCancel) cancelledCleanup.push(report.status === 'skipped' ? 'passed' : report.status);
     await finish(ref, report);
 
     if (report.status === 'failed' || report.status === 'error') {
@@ -140,15 +193,22 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
     }
   }
 
-  return { steps: outcomes, abort: abortReason(), primaryFailure, browserCrashed };
+  clearTimeout(graceTimer);
+  const cleanupAfterCancelComplete =
+    abortReason()?.kind === 'cancelled' && definition.cleanupSteps.length > 0
+      ? cancelledCleanup.length === definition.cleanupSteps.length && cancelledCleanup.every((status) => status === 'passed')
+      : null;
+  return { steps: outcomes, abort: abortReason(), primaryFailure, browserCrashed, cleanupAfterCancelComplete };
 
   async function finish(ref: StepRef, report: StepReport) {
     outcomes.push({ phase: ref.phase, status: report.status });
     await reporter.stepFinished(ref, report);
   }
 
-  async function executeOne(ref: StepRef, startedAt: Date): Promise<StepReport> {
+  /** `maxDeadline`: cleanup after a cancel shares one time budget. */
+  async function executeOne(ref: StepRef, startedAt: Date, maxDeadline: number | null): Promise<StepReport> {
     const timeoutMs = effectiveStepTimeout(ref.step, definition);
+    const cleanupAfterCancel = maxDeadline !== null;
     try {
       const execution = await executeStep(ref.step, {
         page,
@@ -157,7 +217,7 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
         policy,
         scope,
         blocked,
-        deadline: Date.now() + timeoutMs,
+        deadline: Math.min(Date.now() + timeoutMs, maxDeadline ?? Number.POSITIVE_INFINITY),
       });
       // Outputs are published only now that the whole step (incl. network checks) has passed.
       for (const [name, value] of Object.entries(execution.outputs ?? {})) scope.set('outputs', name, value);
@@ -172,7 +232,8 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
       };
     } catch (error) {
       const abort = abortReason();
-      if (abort) {
+      // Cleanup after a cancel reports its real outcome (it runs on purpose despite the cancel).
+      if (abort && !cleanupAfterCancel) {
         if (abort.kind === 'cancelled') {
           return { ...done('cancelled', startedAt), errorMessage: 'Step stopped: run cancelled' };
         }
