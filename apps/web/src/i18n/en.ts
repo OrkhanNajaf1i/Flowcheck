@@ -366,6 +366,11 @@ export const en = {
     forWebsite: (site: string) => `for ${site}`,
     runOnlyOn: (site: string) => `This test uses a login session, so it can only run on "${site}".`,
   },
+  access: {
+    title: 'Open FlowCheck with its link',
+    body: 'In the terminal where you started FlowCheck (pnpm start) there is a line like the one below. Open that link once in this browser; it is remembered for 30 days.',
+    why: 'This keeps other programs on this computer and other websites from using your FlowCheck. The link stays the same after restarts.',
+  },
   recorder: {
     record: 'Record steps',
     title: 'Record steps',

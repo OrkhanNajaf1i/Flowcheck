@@ -21,7 +21,7 @@ SaaS/cloud browsers, multiple users/roles, AI test generation, selector self-hea
 
 ## Current implementation state
 
-Phases 1–4 are implemented. Not available yet: cleanup on cancel, artifact retention, bootstrap token. See [STATUS.md](STATUS.md) for the exact list.
+Phases 1–4 and the access token and artifact retention of phase 5 are implemented. Not available yet: cleanup after cancel, revision diff view. See [STATUS.md](STATUS.md) for the exact list.
 
 ## Known technical limits
 

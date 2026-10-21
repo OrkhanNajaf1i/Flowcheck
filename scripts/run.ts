@@ -49,7 +49,9 @@ function stopAll(code: number) {
 }
 
 for (const proc of procs) {
-  const child = spawn(proc.command, proc.args, { cwd: proc.cwd, env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  // In dev mode the UI is served by Vite, so the server prints its access link with Vite's port.
+  const env = proc.name === 'server' && mode === 'dev' ? { ...process.env, FLOWCHECK_UI_PORT: '5173' } : process.env;
+  const child = spawn(proc.command, proc.args, { cwd: proc.cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
   children.push(child);
   const prefix = `\x1b[${proc.color}m[${proc.name}]\x1b[0m `;
   const pipe = (stream: NodeJS.ReadableStream, out: NodeJS.WriteStream) => {
@@ -76,7 +78,7 @@ for (const proc of procs) {
 
 const port = process.env.FLOWCHECK_SERVER_PORT ?? '4310';
 console.log(
-  `\nFlowCheck UI: http://127.0.0.1:${mode === 'dev' ? '5173' : port}${withDemo ? '   ·   Demo shop: http://127.0.0.1:4320' : ''}\n`,
+  `\nFlowCheck UI: http://127.0.0.1:${mode === 'dev' ? '5173' : port} (first time in a browser: open the "Open FlowCheck" link printed by [server])${withDemo ? '   ·   Demo shop: http://127.0.0.1:4320' : ''}\n`,
 );
 
 process.on('SIGINT', () => stopAll(0));

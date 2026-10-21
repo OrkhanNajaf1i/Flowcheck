@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createProjectWithEnv, definition, runTest, SERVER, stepStatuses } from './helpers.ts';
+import { AUTH, createProjectWithEnv, definition, runTest, SERVER, stepStatuses } from './helpers.ts';
 
 const id = (value: string) => ({ kind: 'testId', value });
 const label = (value: string) => ({ kind: 'label', value, exact: true });
@@ -252,7 +252,7 @@ test('a passed step keeps a screenshot only when the step asks for one', async (
   expect(run.steps[0]?.artifacts).toEqual([]);
   const [shot] = run.steps[1]?.artifacts ?? [];
   expect(shot).toMatchObject({ type: 'screenshot', mimeType: 'image/png', sensitive: true });
-  const res = await fetch(`${SERVER}/api/runs/${run.id}/artifacts/${shot?.id}`);
+  const res = await fetch(`${SERVER}/api/runs/${run.id}/artifacts/${shot?.id}`, { headers: AUTH });
   expect(res.status).toBe(200);
   expect(res.headers.get('content-type')).toContain('image/png');
 });

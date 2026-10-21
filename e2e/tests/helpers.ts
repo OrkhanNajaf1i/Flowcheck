@@ -1,14 +1,18 @@
 import type { RunDto } from '@flowcheck/shared';
 import { expect } from '@playwright/test';
+import { SESSION_COOKIE } from '../playwright.config.ts';
 
 export const SERVER = 'http://127.0.0.1:4410';
 export const DEMO = 'http://127.0.0.1:4420';
+/** Cookie header of the signed-in test browser. */
+export const AUTH = { cookie: `${SESSION_COOKIE.name}=${SESSION_COOKIE.value}` };
 
 /** Calls the FlowCheck API like the UI does (same-origin Origin header). */
 export async function api<T = any>(method: string, path: string, body?: unknown): Promise<{ status: number; body: T }> {
   const res = await fetch(`${SERVER}/api${path}`, {
     method,
     headers: {
+      ...AUTH,
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
       ...(method === 'GET' ? {} : { origin: SERVER }),
     },

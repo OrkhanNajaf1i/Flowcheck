@@ -368,6 +368,11 @@ export const az: Dict = {
     forWebsite: (site: string) => `${site} üçün`,
     runOnlyOn: (site: string) => `Bu test login sessiyası istifadə edir, ona görə yalnız "${site}" saytında işləyə bilər.`,
   },
+  access: {
+    title: 'FlowCheck-i öz linki ilə açın',
+    body: 'FlowCheck-i başlatdığınız terminalda (pnpm start) aşağıdakına bənzər sətir var. O linki bu brauzerdə bir dəfə açın; 30 gün yadda qalır.',
+    why: 'Bu, kompüterdəki digər proqramların və başqa saytların FlowCheck-inizdən istifadə etməsinin qarşısını alır. Link yenidən başlatmadan sonra dəyişmir.',
+  },
   recorder: {
     record: 'Addımları qeyd et',
     title: 'Addımları qeyd et',

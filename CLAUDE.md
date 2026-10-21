@@ -59,4 +59,4 @@ pnpm check                       # biome + typecheck + unit/integration tests
 pnpm e2e                         # builds UI; API + UI acceptance tests on ports 4420/4410
 pnpm db:generate                 # after editing packages/db/src/schema.ts
 ```
-The owner may already run FlowCheck on 4310 with real data in `./data`. For manual verification use another port and data dir (`FLOWCHECK_SERVER_PORT`, `FLOWCHECK_DATA_DIR`) — never send test requests to the owner's instance.
+The owner may already run FlowCheck on 4310 with real data in `./data`. For manual verification use another port and data dir (`FLOWCHECK_SERVER_PORT`, `FLOWCHECK_DATA_DIR`) — never send test requests to the owner's instance. Every `/api` request needs the session cookie: set `FLOWCHECK_ACCESS_TOKEN` (≥ 32 chars) and open `/api/session?token=…`, or send the cookie from `sessionValue()`.

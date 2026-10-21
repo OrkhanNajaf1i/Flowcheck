@@ -5,6 +5,7 @@ export * from './errors.ts';
 export * from './ids.ts';
 export * from './lock.ts';
 export * from './recordings.ts';
+export * from './retention.ts';
 export * from './runs.ts';
 export * as schema from './schema.ts';
 export * from './secret-box.ts';

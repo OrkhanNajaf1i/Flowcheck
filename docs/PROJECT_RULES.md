@@ -681,6 +681,7 @@ Təhlükəsiz paylaşma:
 
 Retention: 30 gün; artefakt başına maks. 10 MB; layihə başına 500 MB. Limit keçəndə ən köhnə silinir. Silinmə xətaları loglanır. Run silinəndə artefaktlar da təmizlənir.
 - [TÖVSİYƏ] Retention işi server başlayanda və hər 6 saatdan bir işləyir; aktiv run-un artefaktlarına toxunmur.
+- [DÜZƏLİŞ #52] İmplementasiya: əvvəl yaşa görə (30 gün), sonra layihə kvotası (500 MB) — queued/running run-ların artefaktları kvotaya sayılır, amma silinmir; əvvəl DB sətirləri, sonra fayllar (fayl silinmə xətası loglanır). Konfiqurasiya: `FLOWCHECK_ARTIFACT_RETENTION_DAYS`, `FLOWCHECK_ARTIFACT_QUOTA_MB` (müsbət ədəd deyilsə server başlamır).
 - [TÖVSİYƏ] 10 MB-dan böyük artefakt saxlanılmır, əvəzində "artifact skipped: too large" qeydi.
 
 ---
@@ -695,6 +696,7 @@ Default yalnız `127.0.0.1`-də dinləyir. "Lokal = təhlükəsiz" fərziyyəsi 
 - GET heç vaxt state dəyişmir.
 - **Host header yoxlaması** (DNS rebinding): yalnız `127.0.0.1:<port>`, `localhost:<port>` qəbul olunur; qalanı → `403 HOST_NOT_ALLOWED`.
 - **Lokal bootstrap access** [TÖVSİYƏ: konkret mexanizm]: server başlayanda təsadüfi token yaradır və konsola `http://127.0.0.1:4310/?token=...` çap edir. İlk açılışda token `HttpOnly; SameSite=Strict` session cookie-yə çevrilir, URL-dən silinir. Bütün `/api` sorğuları bu cookie-ni tələb edir (`401 UNAUTHORIZED`). Token `data/` altında 0600 faylda saxlanılır ki, restart-dan sonra eyni qalsın (və ya hər dəfə yenilənsin — konfiqurasiya).
+- [DÜZƏLİŞ #51] İmplementasiya: link `http://127.0.0.1:<port>/api/session?token=…` (Vite dev-də 5173 portu ilə, proxy vasitəsilə işləyir); cookie adı `flowcheck_session_<port>` (cookie-lər port ayırmır, iki instance bir-birini əvəz etməsin), dəyəri tokenin HMAC-ı (token özü cookie-yə yazılmır), `HttpOnly; SameSite=Strict; Max-Age=30 gün` — session cookie əvəzinə, çünki token restart-dan sonra eyni qalır və hər brauzer açılışında linki axtarmaq UX-i pozur. Token: `data/access.token` və ya `FLOWCHECK_ACCESS_TOKEN` (≥ 32 simvol). Cookie-siz UI "FlowCheck-i öz linki ilə açın" izahını göstərir. §25 sual 2 bu default ilə bağlandı.
 - Runner server-in HTTP API-sini çağırmır (yalnız DB) — daxili token lazım deyil.
 - Credential-lar browser bundle-a yazılmır.
 
@@ -954,6 +956,8 @@ Hər mərhələnin sonunda hesabat:
 | 39 | §6 | Addım növlərini istifadəçinin özünün yaratması təklif olundu | **Qərar:** addım növləri statik (engine kodu) qalır — istifadəçi tərəfindən yaradılan növ ixtiyari kod icrası olardı (§6 qadağası) və nəticənin etibarlılığını pozardı. İstifadəçi addımları (instance) sərbəst yaradır. Gələcək ideya: təkrar istifadə olunan **addım qrupları** (məs. "Login" bir dəfə yaradılıb bir neçə testdə istifadə) |
 | 40 | §6 | `assertText`/`assertValue`/`assertEnabled` son oxunuşda ~1 ms timeout alıb `INTERNAL_ERROR` verirdi (e2e tam suite-də aşkarlandı) | Oxunuşa minimum 500 ms; deadline-dan sonrakı timeout son müşahidə ilə `ASSERTION_FAILED` sayılır |
 | 46 | §11/§16 | Secret sayt tərəfindən URL-ə yazılanda (məs. `/done?name=<secret>`) addım sübutundakı `url` sahəsi açıq qalırdı | Redaksiya mərkəzləşdirildi: engine hər addımın bütün `expected`/`actual`-ını və xəta mesajını saxlamadan əvvəl məlum secret dəyərlərindən (düz, URL-encoded, base64) təmizləyir. Login şablonu parolu `{{secrets.testPassword}}`-dən oxuyur |
+| 52 | §16 | Retention qaydası var idi, mexanizm yox | Yaş + layihə kvotası, aktiv run-lara toxunulmur, 6 saatdan bir; §16 [DÜZƏLİŞ #52] |
+| 51 | §17/§25 | Bootstrap token: session cookie hər brauzer açılışında linki tələb edirdi; cookie-lər port ayırmır; dev rejimində (Vite) `/?token=` serverə çatmırdı | `/api/session?token=` (proxy ilə də işləyir), port adlı cookie, HMAC dəyəri, 30 günlük cookie; §17 [DÜZƏLİŞ #51] |
 | 50 | §8 | Recorder yoxlama qeyd etmirdi; "modal açıldımı?" kimi yoxlamalar sonradan əl ilə qurulmalı idi | Toolbar-da tester tərəfindən seçilən `assertVisible`/`assertText`; seçim klik-i səhifəyə ötürülmür; toolbar UI dilində |
 | 49 | §16 | Keçən addımın nə göstərdiyini görmək mümkün deyildi (məs. "klik keçdi, amma modal açıldımı?") | UI addımında istəyə bağlı `screenshot: true` (keçəndən sonra şəkil); editorda izah: sübut üçün "Göründüyünü yoxla" addımı |
 | 48 | §8/§5/§18 | Recorder üçün: runner-də gecikmiş `count()` yoxlaması naviqasiyadan sonra etibarsızdır; `draftSteps` event-lərlə dublikat məlumat idi; `runner_commands` capture ilə uyğunsuz idi; süni (untrusted) event-lər saxta addım yarada bilərdi | Unikallıq hərəkət anında səhifədə (Chromium accessibility dəyərləri ilə) yoxlanılır; draft event-lərdən qurulur; sessiya sətri əmr kanalıdır; yalnız trusted event-lər; ətraflı §8 [DÜZƏLİŞ #48] |

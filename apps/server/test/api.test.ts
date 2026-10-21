@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { type DatabaseHandle, openDatabase } from '@flowcheck/db';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { loadAccessToken, sessionCookieName, sessionValue } from '../src/access.ts';
 import { buildServer } from '../src/app.ts';
 import { loadConfig } from '../src/config.ts';
 
@@ -13,12 +14,14 @@ let app: FastifyInstance;
 
 const HOST = '127.0.0.1:4310';
 const ORIGIN = 'http://127.0.0.1:4310';
+const TOKEN = 'test-access-token-0123456789abcdefghij';
+const COOKIE = `${sessionCookieName(4310)}=${sessionValue(TOKEN)}`;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'flowcheck-server-'));
   const config = loadConfig({ FLOWCHECK_DATA_DIR: dir });
   handle = openDatabase(config.dbFile);
-  app = await buildServer(handle.db, config);
+  app = await buildServer(handle.db, config, { accessToken: TOKEN });
 });
 
 afterEach(async () => {
@@ -31,7 +34,7 @@ function call(method: InjectOptions['method'], url: string, payload?: unknown, h
   return app.inject({
     method,
     url,
-    headers: { host: HOST, ...(method === 'GET' ? {} : { origin: ORIGIN }), ...headers },
+    headers: { host: HOST, cookie: COOKIE, ...(method === 'GET' ? {} : { origin: ORIGIN }), ...headers },
     ...(payload === undefined ? {} : { payload: payload as Record<string, unknown> }),
   });
 }
@@ -276,5 +279,42 @@ describe('recordings', () => {
     const { project, env } = await seed();
     const res = await call('POST', `/api/projects/${project.id}/recordings`, { environmentId: env.id, startPath: '//evil.example' });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('local access token', () => {
+  it('refuses API requests without the session cookie, also for artifacts', async () => {
+    for (const url of ['/api/projects', '/api/runs/x/artifacts/y']) {
+      const res = await app.inject({ method: 'GET', url, headers: { host: HOST } });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().error.code).toBe('UNAUTHORIZED');
+    }
+    const forged = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { host: HOST, cookie: `${sessionCookieName(4310)}=${TOKEN}` },
+    });
+    expect(forged.statusCode).toBe(401);
+  });
+
+  it('exchanges the printed link for an HttpOnly SameSite=Strict cookie and redirects to the UI', async () => {
+    const res = await app.inject({ method: 'GET', url: `/api/session?token=${TOKEN}`, headers: { host: HOST } });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('/');
+    const cookie = String(res.headers['set-cookie']);
+    expect(cookie).toContain(`${sessionCookieName(4310)}=${sessionValue(TOKEN)}`);
+    expect(cookie).toMatch(/HttpOnly/);
+    expect(cookie).toMatch(/SameSite=Strict/);
+    expect(cookie).not.toContain(TOKEN);
+    const wrong = await app.inject({ method: 'GET', url: '/api/session?token=nope', headers: { host: HOST } });
+    expect(wrong.statusCode).toBe(401);
+    expect(wrong.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('keeps the token in data/ across restarts', () => {
+    const first = loadAccessToken(dir, {});
+    expect(first.length).toBeGreaterThanOrEqual(32);
+    expect(loadAccessToken(dir, {})).toBe(first);
+    expect(() => loadAccessToken(dir, { FLOWCHECK_ACCESS_TOKEN: 'short' })).toThrow(/at least 32/);
   });
 });

@@ -103,6 +103,10 @@ Encrypted secrets per project (API + "Secrets" tab), `{{secrets.name}}` in fill 
 
 "Record steps" in the editor's main steps: the runner opens a visible browser (target guard, service workers blocked, 30 min limit) with a recorder script and an in-page "Stop" overlay. Recorded: click, typing (one fill per field, last value; flushed before any other action and on stop), choose from list, tick/untick, Enter/Tab/Escape, direct navigation (not the result of a recorded action, 3 s window); SPA route changes do not add steps. Only trusted events are recorded; the runner validates every event with Zod and stores it with `sequence` assigned in the same transaction, duplicates by `clientEventId` are ignored. Locators: test id → data-* → role + Chromium's own accessible name → label → placeholder → name → alt/title → text → id, each checked to match exactly one element on the page; an ambiguous role/text is scoped to a container with a stable handle; otherwise a CSS path marked fragile. Password values are never sent (draft uses `{{secrets.password}}` + warning). Frames, shadow DOM, popups, file inputs, drag and drop, unsupported fields → warnings. The draft is derived from the events on every read and only becomes a revision when the tester saves. Evidence: shared (draft building, event schema), db (sequence, duplicates, lock, stop, orphans, project delete), server (start/stop/lock/start path), e2e (`recorder.spec.ts`, 8 tests: criteria 4, 24, 29, password, SPA, scoping, overlay Stop, UI flow).
 
+## Phase 5 (part 1): access token and artifact retention — done
+
+The server prints `Open FlowCheck: …/api/session?token=…` (Vite port in dev); opening it sets `flowcheck_session_<port>` (HMAC of the token, HttpOnly, SameSite=Strict, 30 days) and every `/api` request without it gets `401` — the UI explains how to open the link. Token in `data/access.token` (same across restarts) or `FLOWCHECK_ACCESS_TOKEN`. Artifact retention at start and every 6 h: 30 days, then 500 MB per project oldest first, never for queued/running runs. Evidence: db (age, quota, active runs), server (401 incl. artifacts, forged cookie, link exchange, token persistence, file deletion, config validation), e2e (all suites use the cookie; a browser without it sees the explanation and the link signs it in), manual start on port 4510 (link printed, 401, cookie + redirect).
+
 ## Recorder: checks from the toolbar — done
 
 The recorder toolbar has "Check it is shown" and "Check text": the next click picks the element (highlighted, never reaches the page, Esc cancels) and becomes an assertVisible / exact assertText step. Toolbar texts follow the UI language (en/az). Evidence: shared (check steps, template-like text dropped), demo SPA dialog, e2e (picking "Close" does not close the dialog; draft with checks replays and passes; Azerbaijani toolbar).
@@ -114,8 +118,8 @@ Optional per page step (`screenshot: true`, editor: step → Advanced settings):
 ## Not done yet (next phases)
 
 - **Phase 2 leftovers:** best-effort cleanup after cancel; revision diff view.
-- **Phase 5:** bootstrap token, artifact retention/quota, remaining acceptance criteria (1, 2, 5–9, 12, 13, 17, 21, 31) and e2e for real process restart and redirect bypass.
+- **Phase 5 (rest):** remaining acceptance criteria (1, 2, 5–9, 12, 13, 17, 21, 31) and e2e for real process restart and redirect bypass.
 
 ## Next concrete task
 
-Phase 5: bootstrap token for the local server, artifact retention and quota.
+Phase 5 (rest): remaining acceptance criteria (service-worker page in the demo for criterion 31, real process restart, redirect bypass), then the phase 2 leftovers (cleanup after cancel, revision diff).

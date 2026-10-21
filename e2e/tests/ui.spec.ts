@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
-import { createProjectWithEnv, createTest, DEMO, definition, SERVER, setDemoMode } from './helpers.ts';
+import { ACCESS_TOKEN } from '../playwright.config.ts';
+import { AUTH, createProjectWithEnv, createTest, DEMO, definition, SERVER, setDemoMode } from './helpers.ts';
 
 /**
  * Drives the real web UI (served by the FlowCheck server) the way a tester would.
@@ -153,7 +154,7 @@ test('the UI can be switched to Azerbaijani', async ({ page }) => {
 
 test('a project can be deleted only after typing its name', async ({ page }) => {
   const { projectId } = await createProjectWithEnv();
-  const project = (await (await fetch(`${SERVER}/api/projects/${projectId}`)).json()) as { name: string };
+  const project = (await (await fetch(`${SERVER}/api/projects/${projectId}`, { headers: AUTH })).json()) as { name: string };
   await page.goto(`${SERVER}/projects/${projectId}`);
   await page.getByRole('button', { name: 'Delete project' }).click();
   const dialog = page.getByRole('dialog');
@@ -164,7 +165,7 @@ test('a project can be deleted only after typing its name', async ({ page }) => 
   await dialog.getByLabel(/Type the project name/).fill(project.name);
   await confirm.click();
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
-  expect((await fetch(`${SERVER}/api/projects/${projectId}`)).status).toBe(404);
+  expect((await fetch(`${SERVER}/api/projects/${projectId}`, { headers: AUTH })).status).toBe(404);
 });
 
 test('new step types can be added in the editor and pass against the demo form', async ({ page }) => {
@@ -389,4 +390,18 @@ test('a login session is created from the website card, picked in the editor and
   await expect(page.getByText('This test uses a login session')).toBeVisible();
   await page.getByRole('button', { name: 'Start run' }).click();
   await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});
+
+test('a browser without the access link is told how to open FlowCheck; the printed link signs it in', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await page.goto(SERVER);
+  await expect(page.getByText('Open FlowCheck with its link')).toBeVisible();
+  expect((await page.request.get(`${SERVER}/api/projects`)).status()).toBe(401);
+
+  await page.goto(`${SERVER}/api/session?token=${ACCESS_TOKEN}`);
+  // The token is removed from the address bar; the UI works with the cookie.
+  await expect(page).toHaveURL(`${SERVER}/`);
+  await expect(page.getByRole('button', { name: /New project|Create your first project/ }).first()).toBeVisible();
+  await context.close();
 });

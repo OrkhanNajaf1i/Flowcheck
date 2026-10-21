@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  AUTH,
   api,
   createProjectWithEnv,
   createTest,
@@ -74,12 +75,12 @@ test.describe('phase 1 vertical slice', () => {
 
     const screenshot = failed?.artifacts.find((a) => a.type === 'screenshot');
     expect(screenshot).toBeDefined();
-    const download = await fetch(`${SERVER}/api/runs/${run.id}/artifacts/${screenshot?.id}`);
+    const download = await fetch(`${SERVER}/api/runs/${run.id}/artifacts/${screenshot?.id}`, { headers: AUTH });
     expect(download.status).toBe(200);
     expect(download.headers.get('content-type')).toBe('image/png');
     expect(download.headers.get('content-security-policy')).toContain('sandbox');
     // The same artifact is not reachable through another run.
-    const other = await fetch(`${SERVER}/api/runs/00000000-0000-0000-0000-000000000000/artifacts/${screenshot?.id}`);
+    const other = await fetch(`${SERVER}/api/runs/00000000-0000-0000-0000-000000000000/artifacts/${screenshot?.id}`, { headers: AUTH });
     expect(other.status).toBe(404);
   });
 
