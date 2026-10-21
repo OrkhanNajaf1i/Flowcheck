@@ -9,8 +9,7 @@ import {
   markAuthCaptureSaving,
   saveAuthProfile,
 } from '@flowcheck/db';
-import { effectiveAllowedOrigins } from '@flowcheck/shared';
-import { buildNavigateUrl, installTargetGuard } from '@flowcheck/test-engine';
+import { buildNavigateUrl, startTargetGuard, type TargetGuard, targetPolicy } from '@flowcheck/test-engine';
 import type { Logger } from 'pino';
 import { type Browser, type BrowserContext, chromium } from 'playwright';
 import type { RunnerConfig } from './config.ts';
@@ -30,6 +29,7 @@ export async function runAuthCapture(
   const captureLog = log.child({ captureId: capture.id });
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
+  let guard: TargetGuard | undefined;
   let windowClosed = false;
   try {
     const env = getEnvironment(db, capture.environmentId);
@@ -38,8 +38,9 @@ export async function runAuthCapture(
       windowClosed = true;
     });
     // Same isolation and target policy as a run: no service workers, only allowed origins.
-    context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false });
-    await installTargetGuard(context, { allowedOrigins: effectiveAllowedOrigins(env), allowPrivateNetwork: env.allowPrivateNetwork });
+    guard = await startTargetGuard(targetPolicy(env));
+    context = await browser.newContext({ ...guard.contextOptions, serviceWorkers: 'block', acceptDownloads: false });
+    await guard.install(context);
     const page = await context.newPage();
     page.on('close', () => {
       if (context && context.pages().length === 0) windowClosed = true;
@@ -90,5 +91,6 @@ export async function runAuthCapture(
   } finally {
     await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
+    await guard?.close().catch(() => undefined);
   }
 }

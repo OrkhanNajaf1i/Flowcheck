@@ -20,7 +20,15 @@ import {
   revealSecrets,
 } from '@flowcheck/db';
 import { allSteps, type FailureSummary, type FinalRunStatus, parseDefinition, referencedSecrets, resolveInputs } from '@flowcheck/shared';
-import { type AbortReason, computeRunStatus, effectiveRunTimeout, runDefinition } from '@flowcheck/test-engine';
+import {
+  type AbortReason,
+  computeRunStatus,
+  effectiveRunTimeout,
+  runDefinition,
+  startTargetGuard,
+  type TargetGuard,
+  targetPolicy,
+} from '@flowcheck/test-engine';
 import type { Logger } from 'pino';
 import { type Browser, type BrowserContext, chromium } from 'playwright';
 import type { RunnerConfig } from './config.ts';
@@ -112,6 +120,7 @@ async function execute(
 
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
+  let guard: TargetGuard | undefined;
   const forceClose = () => {
     void context?.close().catch(() => undefined);
   };
@@ -144,6 +153,7 @@ async function execute(
   }, config.heartbeatIntervalMs);
 
   try {
+    guard = await startTargetGuard(targetPolicy(run.environmentSnapshot));
     browser = await chromium.launch({ headless: !config.headed });
     // A saved login session is loaded into the new context; it is never written back.
     let storageState: Exclude<Parameters<Browser['newContext']>[0], undefined>['storageState'];
@@ -161,6 +171,8 @@ async function execute(
       storageState = state as typeof storageState;
     }
     context = await browser.newContext({
+      // All browser traffic goes through the target guard (redirect hops included).
+      ...guard.contextOptions,
       ...(storageState ? { storageState } : {}),
       // Service workers could bypass request interception and the target guard.
       serviceWorkers: 'block',
@@ -170,6 +182,7 @@ async function execute(
     const startedAt = new Date(run.startedAt ?? Date.now()).toISOString();
     const result = await runDefinition({
       context,
+      guard,
       definition,
       environment: run.environmentSnapshot,
       inputs: inputs.values,
@@ -234,6 +247,7 @@ async function execute(
     shutdown.removeEventListener('abort', onShutdown);
     await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
+    await guard?.close().catch(() => undefined);
   }
 }
 

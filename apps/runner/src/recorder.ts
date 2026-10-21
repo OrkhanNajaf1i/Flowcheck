@@ -10,15 +10,8 @@ import {
   RECORDING_MAX_MS,
   type RecordingRow,
 } from '@flowcheck/db';
-import {
-  ARIA_ROLES,
-  effectiveAllowedOrigins,
-  looksGeneratedId,
-  pageEventSchema,
-  type RecordedEvent,
-  type RUNNER_NOTICES,
-} from '@flowcheck/shared';
-import { buildNavigateUrl, installTargetGuard } from '@flowcheck/test-engine';
+import { ARIA_ROLES, looksGeneratedId, pageEventSchema, type RecordedEvent, type RUNNER_NOTICES } from '@flowcheck/shared';
+import { buildNavigateUrl, startTargetGuard, type TargetGuard, targetPolicy } from '@flowcheck/test-engine';
 import type { Logger } from 'pino';
 import { type Browser, type BrowserContext, chromium, type Page } from 'playwright';
 import type { RunnerConfig } from './config.ts';
@@ -70,6 +63,7 @@ export async function runRecording(
   const recLog = log.child({ recordingId: recording.id });
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
+  let guard: TargetGuard | undefined;
   let page: Page | undefined;
   let windowClosed = false;
   let stopFromPage = false;
@@ -113,8 +107,9 @@ export async function runRecording(
     browser.on('disconnected', () => {
       windowClosed = true;
     });
-    context = await browser.newContext({ serviceWorkers: 'block', acceptDownloads: false });
-    await installTargetGuard(context, { allowedOrigins: effectiveAllowedOrigins(env), allowPrivateNetwork: env.allowPrivateNetwork });
+    guard = await startTargetGuard(targetPolicy(env));
+    context = await browser.newContext({ ...guard.contextOptions, serviceWorkers: 'block', acceptDownloads: false });
+    await guard.install(context);
 
     await context.exposeBinding(BINDING, (source, payload: unknown) => {
       if (limitReached || !page || source.page !== page) return; // popups are reported, not recorded
@@ -203,5 +198,6 @@ export async function runRecording(
   } finally {
     await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
+    await guard?.close().catch(() => undefined);
   }
 }

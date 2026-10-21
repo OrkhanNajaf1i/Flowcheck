@@ -46,6 +46,7 @@ const PAGES = {
   '/account': 'account.html',
   '/spa': 'spa.html',
   '/spa/settings': 'spa.html',
+  '/sw': 'sw.html',
 } as const;
 
 const SESSION_COOKIE = 'demo_session';
@@ -64,6 +65,7 @@ export function buildDemoApp(options: { bugMode?: BugMode } = {}): FastifyInstan
   const pageHtml = new Map(
     Object.entries(PAGES).map(([path, file]) => [path, readFileSync(new URL(`../public/${file}`, import.meta.url), 'utf8')]),
   );
+  const serviceWorker = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8');
   for (const path of Object.keys(PAGES)) {
     app.get(path, async (_req, reply) => reply.type('text/html; charset=utf-8').send(pageHtml.get(path)));
   }
@@ -158,6 +160,26 @@ export function buildDemoApp(options: { bugMode?: BugMode } = {}): FastifyInstan
     return reply.redirect('/account');
   });
 
+  app.get('/sw.js', async (_req, reply) => reply.type('text/javascript; charset=utf-8').send(serviceWorker));
+
+  // Redirects to the same server under another origin (localhost instead of 127.0.0.1), which a
+  // test environment does not allow; /__demo/hits shows whether the target was ever reached.
+  let hits = 0;
+  const redirectAway = async (req: FastifyRequest, reply: FastifyReply) => {
+    const port = (req.headers.host ?? '').split(':')[1] ?? '80';
+    return reply.redirect(`http://localhost:${port}/__demo/hit`, 302);
+  };
+  app.get('/redirect-away', redirectAway);
+  // Allowed chains: same origin, and a chain whose second hop leaves the allowlist.
+  app.get('/redirect-home', async (_req, reply) => reply.redirect('/form', 302));
+  app.get('/redirect-twice', async (_req, reply) => reply.redirect('/redirect-away', 302));
+  app.get('/api/redirect-away', redirectAway);
+  app.get('/__demo/hit', async () => {
+    hits += 1;
+    return { hits };
+  });
+  app.get('/__demo/hits', async () => ({ hits }));
+
   // Demo control endpoints, loopback only.
   app.get('/__demo/mode', async () => ({ mode: bugMode }));
   app.post<{ Body: { mode?: unknown } }>('/__demo/mode', async (req, reply) => {
@@ -171,6 +193,7 @@ export function buildDemoApp(options: { bugMode?: BugMode } = {}): FastifyInstan
     if (!isLoopback(req.ip)) return reply.code(403).send({ error: 'loopback_only' });
     carts.clear();
     orders.clear();
+    hits = 0;
     bugMode = options.bugMode ?? 'success';
     return { mode: bugMode };
   });

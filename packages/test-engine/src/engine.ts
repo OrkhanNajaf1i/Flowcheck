@@ -13,7 +13,7 @@ import { StepError } from './errors.ts';
 import { redactJson, redactText } from './redact.ts';
 import { effectiveStepTimeout, type StepOutcome } from './status.ts';
 import { executeStep, expectedOf, firstLine, StepFailure, UI_STEP_TYPES } from './steps.ts';
-import { installTargetGuard } from './target-guard.ts';
+import type { TargetGuard } from './target-guard.ts';
 import type { TargetPolicy } from './url-policy.ts';
 import { VariableScope } from './variables.ts';
 
@@ -45,7 +45,9 @@ export interface EngineReporter {
 export type AbortReason = { kind: 'cancelled' } | { kind: 'interrupted'; code: 'RUN_TIMEOUT' | 'PROCESS_INTERRUPTED' };
 
 export interface RunDefinitionOptions {
+  /** Created with guard.contextOptions, so all its traffic goes through the target guard. */
   context: BrowserContext;
+  guard: TargetGuard;
   definition: TestDefinition;
   environment: EnvironmentSnapshot;
   inputs: Record<string, InputValue>;
@@ -85,7 +87,8 @@ export async function runDefinition(options: RunDefinitionOptions): Promise<RunD
   scope.set('run', 'suffix', options.run.suffix);
   for (const [name, value] of Object.entries(options.secrets ?? {})) scope.set('secrets', name, value);
 
-  const blocked = await installTargetGuard(context, policy);
+  await options.guard.install(context);
+  const blocked = options.guard.blocked;
   let browserCrashed = false;
   const page: Page = await context.newPage();
   page.on('crash', () => {

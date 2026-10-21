@@ -61,6 +61,18 @@ export async function assertHostAllowed(
   policy: TargetPolicy,
   resolve: (host: string) => Promise<string[]> = defaultResolve,
 ): Promise<void> {
+  await allowedAddresses(url, policy, resolve);
+}
+
+/**
+ * The checked IP addresses of the URL's host. Connecting to one of these (instead of resolving
+ * again) removes the gap between the check and the connection.
+ */
+export async function allowedAddresses(
+  url: URL,
+  policy: TargetPolicy,
+  resolve: (host: string) => Promise<string[]> = defaultResolve,
+): Promise<string[]> {
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (METADATA_HOSTNAMES.has(host)) {
     throw new StepError('SSRF_BLOCKED', `Host ${host} is a cloud metadata endpoint and is always blocked`);
@@ -80,6 +92,7 @@ export async function assertHostAllowed(
       );
     }
   }
+  return addresses;
 }
 
 async function defaultResolve(host: string): Promise<string[]> {

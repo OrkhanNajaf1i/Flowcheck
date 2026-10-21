@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Offline shop - Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:520px;margin:2rem auto;padding:0 1rem}</style>
+</head>
+<body>
+  <!-- Registers a service worker that answers cart requests itself (acceptance criterion 31). -->
+  <h1>Offline-ready shop</h1>
+  <p data-testid="sw-status">Service worker: checking…</p>
+  <button type="button" data-testid="add-mug">Add mug</button>
+  <p data-testid="result"></p>
+  <script type="module">
+    const status = document.querySelector('[data-testid="sw-status"]');
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then(() => {
+          status.textContent = 'Service worker: registered';
+        })
+        .catch(() => {
+          status.textContent = 'Service worker: blocked';
+        });
+    } else {
+      status.textContent = 'Service worker: not available';
+    }
+    document.querySelector('[data-testid="add-mug"]').addEventListener('click', async () => {
+      const res = await fetch('/api/cart/items', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ productId: 'p-1', quantity: 1 }),
+      });
+      document.querySelector('[data-testid="result"]').textContent = `Status ${res.status}`;
+    });
+  </script>
+</body>
+</html>
