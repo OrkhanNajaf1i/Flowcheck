@@ -37,7 +37,7 @@ Last updated: 2026-10-20 (phase 2).
 | 14 | ambiguous locator → `AMBIGUOUS_LOCATOR` | e2e `phase1` |
 | 15 | 403 expected and received → passed | e2e `phase1` |
 | 16 | missing variable → `MISSING_VARIABLE` | shared + e2e `phase1` |
-| 17 | secret never in report, log or API response | e2e `secrets.spec` |
+| 17 | secret never in report, log or API response | e2e `secrets.spec` (report + API responses); logs: secret values are never logged by design, not read by a test |
 | 18 | edits do not change an earlier run's revision | db + server tests |
 | 19 | environment snapshot unaffected by later edits | db + server tests |
 | 20 | after the first main failure the rest is skipped | e2e `phase1` |
