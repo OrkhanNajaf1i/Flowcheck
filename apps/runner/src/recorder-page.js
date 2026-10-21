@@ -257,41 +257,75 @@ function flowcheckRecorder(config) {
   // ---- Overlay (shadow root, never recorded) ----
 
   const OVERLAY_CSS = `
-    .bar{position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;align-items:center;gap:10px;padding:8px 10px 8px 14px;
-      border-radius:999px;background:#111827;color:#fff;font:600 13px/1.2 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+    .bar{position:fixed;right:16px;bottom:16px;z-index:2147483647;display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:calc(100vw - 32px);
+      padding:8px 10px 8px 14px;border-radius:20px;background:#111827;color:#fff;font:600 13px/1.2 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3)}
     .dot{width:10px;height:10px;border-radius:50%;background:#ef4444;animation:p 1.2s infinite}
     @keyframes p{50%{opacity:.35}}
-    button{all:unset;cursor:pointer;padding:6px 12px;border-radius:999px;background:#ef4444;color:#fff}
-    button:focus-visible{outline:2px solid #fff}`;
+    button{all:unset;cursor:pointer;padding:6px 12px;border-radius:999px;background:#374151;color:#fff}
+    button[aria-pressed="true"]{background:#2563eb}
+    button.stop{background:#ef4444}
+    button:focus-visible{outline:2px solid #fff}
+    .hint{flex-basis:100%;font-weight:400;color:#d1d5db}
+    .box{position:fixed;z-index:2147483646;pointer-events:none;border:2px solid #2563eb;background:rgba(37,99,235,.12);border-radius:3px;display:none}`;
   let overlayHost = null;
+  /** "visible" / "text" while the tester picks an element to check; null otherwise. */
+  let checking = null;
+  let ui = null;
+
+  function setChecking(mode) {
+    checking = mode;
+    if (!ui) return;
+    ui.visible.setAttribute('aria-pressed', String(mode === 'visible'));
+    ui.text.setAttribute('aria-pressed', String(mode === 'text'));
+    ui.hint.hidden = mode === null;
+    if (mode === null) ui.box.style.display = 'none';
+  }
+
   /** Built with DOM APIs and a constructed stylesheet so strict CSP / Trusted Types pages still work. */
   function mountOverlay() {
     if (overlayHost || !document.documentElement) return;
     try {
+      const texts = config.texts;
       const host = document.createElement('flowcheck-recorder');
       host.setAttribute('data-flowcheck-recorder', '');
       const root = host.attachShadow({ mode: 'open' });
       const sheet = new CSSStyleSheet();
       sheet.replaceSync(OVERLAY_CSS);
       root.adoptedStyleSheets = [sheet];
-      const bar = document.createElement('div');
-      bar.className = 'bar';
-      bar.setAttribute('role', 'status');
-      const dot = document.createElement('span');
-      dot.className = 'dot';
-      const text = document.createElement('span');
-      text.textContent = 'FlowCheck is recording';
-      const stop = document.createElement('button');
-      stop.type = 'button';
-      stop.textContent = 'Stop';
-      stop.addEventListener('click', () => {
-        flushPending();
-        send({ kind: 'stop' });
-      });
-      bar.append(dot, text, stop);
-      root.append(bar);
+      const make = (tag, className, text) => {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (text) el.textContent = text;
+        return el;
+      };
+      const bar = make('div', 'bar');
+      bar.setAttribute('role', 'toolbar');
+      bar.setAttribute('aria-label', texts.recording);
+      const button = (label, onClick, className) => {
+        const b = make('button', className, label);
+        b.type = 'button';
+        b.addEventListener('click', onClick);
+        return b;
+      };
+      const visible = button(texts.checkVisible, () => setChecking(checking === 'visible' ? null : 'visible'));
+      const text = button(texts.checkText, () => setChecking(checking === 'text' ? null : 'text'));
+      const stop = button(
+        texts.stop,
+        () => {
+          setChecking(null);
+          flushPending();
+          send({ kind: 'stop' });
+        },
+        'stop',
+      );
+      const hint = make('span', 'hint', texts.pickHint);
+      hint.hidden = true;
+      bar.append(make('span', 'dot'), make('span', '', texts.recording), visible, text, stop, hint);
+      const box = make('div', 'box');
+      root.append(box, bar);
       document.documentElement.appendChild(host);
       overlayHost = host;
+      ui = { visible, text, hint, box };
     } catch {
       // The overlay is a convenience; recording works without it (stop from FlowCheck).
     }
@@ -300,6 +334,60 @@ function flowcheckRecorder(config) {
   else mountOverlay();
 
   const fromOverlay = (e) => overlayHost !== null && e.composedPath().includes(overlayHost);
+
+  // ---- Check mode: the next click picks the element to check and never reaches the page ----
+
+  const pickTarget = (e) =>
+    e.target instanceof Element && e.target !== document.body && e.target !== document.documentElement ? e.target : null;
+  for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click', 'dblclick', 'auxclick', 'contextmenu']) {
+    addEventListener(
+      type,
+      (e) => {
+        if (checking === null || !e.isTrusted || fromOverlay(e)) return;
+        // Swallow the whole click so the page does not react (no navigation, no focus, no toggling).
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (type !== 'click') return;
+        const el = pickTarget(e);
+        const mode = checking;
+        setChecking(null);
+        if (!el) return;
+        if (inShadow(e)) return warnOnce('shadowDom');
+        flushPending();
+        const shown = collapse(el instanceof HTMLElement ? el.innerText : el.textContent);
+        if (mode === 'text' && usableValue(shown)) send({ kind: 'assertText', ...describe(el), text: shown });
+        else send({ kind: 'assertVisible', ...describe(el) });
+      },
+      true,
+    );
+  }
+  addEventListener(
+    'mousemove',
+    (e) => {
+      if (checking === null || !ui || fromOverlay(e)) return;
+      const el = pickTarget(e);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      Object.assign(ui.box.style, {
+        display: 'block',
+        left: `${r.left}px`,
+        top: `${r.top}px`,
+        width: `${r.width}px`,
+        height: `${r.height}px`,
+      });
+    },
+    true,
+  );
+  addEventListener(
+    'keydown',
+    (e) => {
+      if (checking === null || e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setChecking(null);
+    },
+    true,
+  );
   /** Events from inside a shadow root are retargeted; such targets are not supported. */
   const inShadow = (e) => e.composedPath()[0] !== e.target;
 

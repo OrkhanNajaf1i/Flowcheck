@@ -7,7 +7,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input, Select } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { ErrorState, Loading, Notice } from '@/components/ui/states';
-import { t } from '@/i18n';
+import { language, t } from '@/i18n';
 import { api } from '@/lib/api';
 
 const FINAL = new Set<RecordingDto['status']>(['stopped', 'failed']);
@@ -38,7 +38,8 @@ export function RecordDialog({
   const [includeOpen, setIncludeOpen] = useState(mainIsEmpty);
 
   const start = useMutation({
-    mutationFn: () => api.startRecording(projectId, { environmentId: environmentId || (enabled[0]?.id ?? ''), startPath, testCaseId }),
+    mutationFn: () =>
+      api.startRecording(projectId, { environmentId: environmentId || (enabled[0]?.id ?? ''), startPath, testCaseId, language }),
     onSuccess: (recording) => setRecordingId(recording.id),
   });
   // Live draft from the DB; the runner drives the browser.

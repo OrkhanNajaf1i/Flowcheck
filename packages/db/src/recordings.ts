@@ -20,7 +20,7 @@ export const RECORDING_MAX_EVENTS = 2_000;
 /** Starts a recording and takes the execution lock in one transaction. */
 export function createRecording(
   db: FlowDb,
-  input: { projectId: string; environmentId: string; startPath: string; testCaseId?: string | undefined },
+  input: { projectId: string; environmentId: string; startPath: string; testCaseId?: string | undefined; language?: 'en' | 'az' },
   now = Date.now(),
 ): RecordingRow {
   return db.transaction(
@@ -41,6 +41,7 @@ export function createRecording(
           environmentId: input.environmentId,
           testCaseId: input.testCaseId ?? null,
           startPath: input.startPath,
+          language: input.language ?? 'en',
           status: 'starting',
           createdAt: now,
         })

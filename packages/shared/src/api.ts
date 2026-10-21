@@ -273,11 +273,16 @@ export interface AuthProfileDto {
 
 // ---- Recorder ----
 
+export const RECORDER_LANGUAGES = ['en', 'az'] as const;
+export type RecorderLanguage = (typeof RECORDER_LANGUAGES)[number];
+
 export const createRecordingSchema = z.strictObject({
   environmentId: id,
   startPath: startPathSchema,
   /** The test the draft is meant for (informational). */
   testCaseId: id.optional(),
+  /** Language of the in-page recorder toolbar (the FlowCheck UI language). */
+  language: z.enum(RECORDER_LANGUAGES).default('en'),
 });
 export type CreateRecordingBody = z.input<typeof createRecordingSchema>;
 

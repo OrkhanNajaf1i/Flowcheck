@@ -30,16 +30,16 @@ test.afterEach(async () => {
   open = null;
 });
 
-async function startRecording(projectId: string, envId: string, startPath: string) {
-  const started = await api<RecordingDto>('POST', `/projects/${projectId}/recordings`, { environmentId: envId, startPath });
+async function startRecording(projectId: string, envId: string, startPath: string, language: 'en' | 'az' = 'en') {
+  const started = await api<RecordingDto>('POST', `/projects/${projectId}/recordings`, { environmentId: envId, startPath, language });
   expect(started.status, JSON.stringify(started.body)).toBe(202);
   open = started.body.id;
   await waitForRecording(started.body.id, 'recording');
-  return attach(started.body.id, startPath);
+  return attach(started.body.id, startPath, language === 'az' ? 'FlowCheck qeyd edir' : 'FlowCheck is recording');
 }
 
 /** Connects to the recorder browser and returns the tester's page once the recorder listens. */
-async function attach(id: string, startPath: string) {
+async function attach(id: string, startPath: string, banner = 'FlowCheck is recording') {
   // The browser is still starting when the runner has claimed the recording.
   let connected: Browser | undefined;
   await expect
@@ -61,7 +61,7 @@ async function attach(id: string, startPath: string) {
     .toBe(true);
   const tester = page as Page;
   // The overlay is mounted once the start page has loaded; then the recorder listens.
-  await expect(tester.getByText('FlowCheck is recording')).toBeVisible();
+  await expect(tester.getByText(banner)).toBeVisible();
   return { id, browser, page: tester };
 }
 
@@ -185,6 +185,37 @@ test.describe('recorder', () => {
     expect(run.status, JSON.stringify(run.steps)).toBe('passed');
   });
 
+  test('checks picked in the toolbar become steps; the picking click never reaches the page', async () => {
+    const { projectId, envId } = await createProjectWithEnv();
+    const { id, browser, page } = await startRecording(projectId, envId, '/spa');
+    const toolbar = page.locator('flowcheck-recorder');
+
+    await page.getByRole('button', { name: 'Create new' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New item' });
+    await expect(dialog).toBeVisible();
+    await toolbar.getByRole('button', { name: 'Check it is shown' }).click();
+    await dialog.getByRole('heading', { name: 'New item' }).click();
+    await toolbar.getByRole('button', { name: 'Check text' }).click();
+    // Picking Close as the element to check must not close the dialog.
+    await dialog.getByRole('button', { name: 'Close' }).click();
+    await expect(dialog).toBeVisible();
+    const recording = await stop(id, browser);
+
+    expect(recording.steps.slice(1)).toEqual([
+      expect.objectContaining({ type: 'click', locator: { kind: 'role', role: 'button', name: 'Create new' } }),
+      expect.objectContaining({ type: 'assertVisible', locator: { kind: 'role', role: 'heading', name: 'New item' } }),
+      expect.objectContaining({
+        type: 'assertText',
+        locator: { kind: 'role', role: 'button', name: 'Close' },
+        expected: 'Close',
+        mode: 'exact',
+      }),
+    ]);
+    const { testCaseId } = await createTest(projectId, definition(recording.steps));
+    const run = await waitForRun(await startRun(testCaseId, envId));
+    expect(run.status, JSON.stringify(run.steps)).toBe('passed');
+  });
+
   test('scopes an ambiguous button to its container instead of guessing', async () => {
     const { projectId, envId } = await createProjectWithEnv();
     const { id, browser, page } = await startRecording(projectId, envId, '/form');
@@ -218,11 +249,11 @@ test.describe('recorder', () => {
     expect(recording.warnings).toEqual([{ code: 'browserClosed', count: 1 }]);
   });
 
-  test('the in-page Stop button stops the recording', async () => {
+  test('the in-page Stop button stops the recording (toolbar in the UI language)', async () => {
     const { projectId, envId } = await createProjectWithEnv();
-    const { id, browser, page } = await startRecording(projectId, envId, '/form');
+    const { id, browser, page } = await startRecording(projectId, envId, '/form', 'az');
     await page.getByLabel('Name').fill('Bob');
-    await page.locator('flowcheck-recorder').getByRole('button', { name: 'Stop' }).click();
+    await page.locator('flowcheck-recorder').getByRole('button', { name: 'Dayandır' }).click();
     const recording = await waitForRecording(id, 'stopped');
     await browser.close().catch(() => undefined);
     expect(summary(recording)).toEqual(['navigate /form', 'fill {"kind":"role","role":"textbox","name":"Name"} = Bob']);

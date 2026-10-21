@@ -29,7 +29,21 @@
         });
         view.append(h1, label, input, save, saved);
       } else {
-        view.append(Object.assign(document.createElement('h1'), { textContent: 'Home' }));
+        // "Create new" opens a dialog (recorder check test: did the modal open?).
+        const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Create new' });
+        const dialog = Object.assign(document.createElement('div'), { hidden: true });
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-labelledby', 'new-item-title');
+        const title = Object.assign(document.createElement('h2'), { id: 'new-item-title', textContent: 'New item' });
+        const close = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Close' });
+        close.addEventListener('click', () => {
+          dialog.hidden = true;
+        });
+        create.addEventListener('click', () => {
+          dialog.hidden = false;
+        });
+        dialog.append(title, close);
+        view.append(Object.assign(document.createElement('h1'), { textContent: 'Home' }), create, dialog);
       }
     }
     for (const button of document.querySelectorAll('[data-route]')) {

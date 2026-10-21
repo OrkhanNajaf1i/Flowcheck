@@ -377,7 +377,7 @@ export const az: Dict = {
     startPath: 'Başlanğıc səhifə',
     startPathHint: 'İlk açılan səhifə, məsələn / və ya /login',
     limits:
-      'Yoxlamalar qeyd olunmur: onları sonra özünüz əlavə edin ("Mətni yoxla", "Səhifə ünvanını yoxla"…). Yazılan parollar heç vaxt saxlanılmır. Frame-lər, yeni tablar, fayl yükləmə və drag-and-drop qeyd olunmur; belə hal olanda xəbərdarlıq görəcəksiniz. Qeyd zamanı heç bir test işləmir.',
+      'Qeyd zamanı yoxlama əlavə etmək üçün brauzerdəki paneldə "Göründüyünü yoxla" və ya "Mətni yoxla" basın və elementə klikləyin (məs. açılmalı olan modal); bu klik səhifəyə çatmır. Yazılan parollar heç vaxt saxlanılmır. Frame-lər, yeni tablar, fayl yükləmə və drag-and-drop qeyd olunmur; belə hal olanda xəbərdarlıq görəcəksiniz. Qeyd zamanı heç bir test işləmir.',
     start: 'Brauzeri aç və qeyd et',
     status: {
       starting: 'Bu kompüterdə brauzer pəncərəsi açılır…',

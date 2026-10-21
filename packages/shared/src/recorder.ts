@@ -80,6 +80,9 @@ export const pageEventSchema = z.discriminatedUnion('kind', [
     locator: locatorSchema.optional(),
     fragile: z.boolean(),
   }),
+  /** Checks the tester added explicitly with the overlay's "check" buttons (never guessed). */
+  z.strictObject({ kind: z.literal('assertVisible'), ...target }),
+  z.strictObject({ kind: z.literal('assertText'), ...target, text: z.string().min(1).max(500) }),
   z.strictObject({ kind: z.literal('unsupported'), clientEventId, what: z.enum(PAGE_UNSUPPORTED) }),
   /** "Stop recording" in the in-page overlay; not stored as an event. */
   z.strictObject({ kind: z.literal('stop'), clientEventId }),
@@ -131,7 +134,7 @@ const sameLocator = (a: Locator | undefined, b: Locator | undefined) => JSON.str
  * - password values become {{secrets.password}} with a warning — the typed value is never stored;
  * - values that would be read as templates ("{{") are left empty with a warning;
  * - unsupported actions and notices become warnings, never silent gaps.
- * Assertions are never generated: a recording shows what was done, not what is correct.
+ * Checks are never guessed: only those the tester picked with the overlay's check buttons are added.
  */
 export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: string): { steps: Step[]; warnings: RecorderWarning[] } {
   const steps: Step[] = [];
@@ -220,6 +223,24 @@ export function buildRecordedSteps(events: readonly RecordedEvent[], startPath: 
           ...(event.locator ? { locator: event.locator } : {}),
         });
         if (event.locator && event.fragile) warnStep('fragileLocator', id);
+        break;
+      }
+      case 'assertVisible': {
+        const id = nextId();
+        push({ id, name: `Check "${targetName(event.locator)}" is shown`, type: 'assertVisible', locator: event.locator });
+        if (event.fragile) warnStep('fragileLocator', id);
+        break;
+      }
+      case 'assertText': {
+        // An empty expectation would pass for any text, so text that reads as a template is not used.
+        if (!parseTemplate(event.text).ok) {
+          warnPage('bracesInValue');
+          break;
+        }
+        const id = nextId();
+        const shown = event.text.length > MAX_NAME_TARGET ? `${event.text.slice(0, MAX_NAME_TARGET - 1)}…` : event.text;
+        push({ id, name: `Check text "${shown}"`, type: 'assertText', locator: event.locator, expected: event.text, mode: 'exact' });
+        if (event.fragile) warnStep('fragileLocator', id);
         break;
       }
       case 'unsupported':

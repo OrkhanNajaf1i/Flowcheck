@@ -92,3 +92,36 @@ describe('pageEventSchema', () => {
     expect(pageEventSchema.safeParse({ kind: 'click', clientEventId: uuid(1), locator: save, fragile: false }).success).toBe(true);
   });
 });
+
+describe('checks picked by the tester', () => {
+  it('become "Check it is shown" and exact "Check text" steps', () => {
+    const heading = { kind: 'role', role: 'heading', name: 'New approval' } as const;
+    const { steps } = buildRecordedSteps(
+      [
+        { kind: 'assertVisible', clientEventId: uuid(++n), locator: heading, fragile: false },
+        { kind: 'assertText', clientEventId: uuid(++n), locator: { kind: 'testId', value: 'saved' }, fragile: false, text: 'Saved: Ada' },
+      ],
+      '/',
+    );
+    expect(steps.slice(1)).toEqual([
+      { id: 'rec-2', name: 'Check "New approval" is shown', type: 'assertVisible', locator: heading },
+      {
+        id: 'rec-3',
+        name: 'Check text "Saved: Ada"',
+        type: 'assertText',
+        locator: { kind: 'testId', value: 'saved' },
+        expected: 'Saved: Ada',
+        mode: 'exact',
+      },
+    ]);
+  });
+
+  it('drops a text check that would read as a template instead of checking for empty text', () => {
+    const { steps, warnings } = buildRecordedSteps(
+      [{ kind: 'assertText', clientEventId: uuid(++n), locator: { kind: 'testId', value: 'x' }, fragile: false, text: 'a {{b' }],
+      '/',
+    );
+    expect(steps).toHaveLength(1);
+    expect(warnings).toEqual([{ code: 'bracesInValue', count: 1 }]);
+  });
+});

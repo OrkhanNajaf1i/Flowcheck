@@ -252,6 +252,8 @@ export const recordingSessions = sqliteTable(
       .references(() => environments.id),
     testCaseId: text('test_case_id'),
     startPath: text('start_path').notNull(),
+    /** Language of the in-page toolbar. */
+    language: text('language').$type<'en' | 'az'>().notNull().default('en'),
     status: text('status').$type<RecordingStatus>().notNull(),
     error: text('error'),
     workerId: text('worker_id'),

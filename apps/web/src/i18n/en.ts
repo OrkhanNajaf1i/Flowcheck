@@ -375,7 +375,7 @@ export const en = {
     startPath: 'Start at',
     startPathHint: 'Page opened first, e.g. / or /login',
     limits:
-      'Checks are not recorded: add them yourself afterwards ("Check text", "Check page address"…). Typed passwords are never stored. Frames, new tabs, file uploads and drag and drop are not recorded; you get a warning when that happens. While recording, no test runs.',
+      'To add a check while recording, press "Check it is shown" or "Check text" in the browser toolbar and click the element (e.g. a dialog that should open); that click does not reach the page. Typed passwords are never stored. Frames, new tabs, file uploads and drag and drop are not recorded; you get a warning when that happens. While recording, no test runs.',
     start: 'Open browser and record',
     status: {
       starting: 'Opening a browser window on this computer…',

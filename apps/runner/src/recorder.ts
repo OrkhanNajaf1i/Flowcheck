@@ -33,11 +33,29 @@ const FLUSH_TIMEOUT_MS = 2_000;
  * The page script plus a bootstrap that passes it its configuration. `looksGeneratedId` is the
  * shared implementation (its source, after Node's type stripping, is plain JavaScript).
  */
-function recorderInitScript(): string {
+function recorderInitScript(language: RecordingRow['language']): string {
   const source = readFileSync(new URL('./recorder-page.js', import.meta.url), 'utf8');
-  return `${source}
-flowcheckRecorder({ binding: ${JSON.stringify(BINDING)}, roles: ${JSON.stringify(ARIA_ROLES)}, looksGeneratedId: ${looksGeneratedId.toString()} });`;
+  const config = `{ binding: ${JSON.stringify(BINDING)}, roles: ${JSON.stringify(ARIA_ROLES)}, texts: ${JSON.stringify(TOOLBAR_TEXTS[language])}, looksGeneratedId: ${looksGeneratedId.toString()} }`;
+  return `${source}\nflowcheckRecorder(${config});`;
 }
+
+/** Texts of the in-page toolbar, in the language of the FlowCheck UI that started the recording. */
+const TOOLBAR_TEXTS = {
+  en: {
+    recording: 'FlowCheck is recording',
+    checkVisible: 'Check it is shown',
+    checkText: 'Check text',
+    stop: 'Stop',
+    pickHint: 'Click the element to check (Esc cancels). The click does not reach the page.',
+  },
+  az: {
+    recording: 'FlowCheck qeyd edir',
+    checkVisible: 'Göründüyünü yoxla',
+    checkText: 'Mətni yoxla',
+    stop: 'Dayandır',
+    pickHint: 'Yoxlanacaq elementə klikləyin (Esc — ləğv). Bu klik səhifəyə çatmır.',
+  },
+} as const;
 
 /**
  * Opens a visible browser and records what the tester does (PROJECT_RULES §8). Events are
@@ -117,7 +135,7 @@ export async function runRecording(
       lastActionAt = Date.now();
       record(event);
     });
-    await context.addInitScript({ content: recorderInitScript() });
+    await context.addInitScript({ content: recorderInitScript(recording.language) });
     context.on('page', (other) => {
       if (page && other !== page) notice('popup');
     });

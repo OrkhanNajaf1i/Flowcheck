@@ -1,0 +1,1 @@
+ALTER TABLE `recording_sessions` ADD `language` text DEFAULT 'en' NOT NULL;
