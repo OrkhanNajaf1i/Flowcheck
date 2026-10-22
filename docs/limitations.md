@@ -21,11 +21,13 @@ SaaS/cloud browsers, multiple users/roles, AI test generation, selector self-hea
 
 ## Current implementation state
 
-Phase 1 is implemented. Not available yet: web UI, recorder, network checks on UI actions, output variables, secrets, auth profiles, cleanup on cancel, artifact retention, bootstrap token. See [STATUS.md](STATUS.md) for the exact list.
+Phases 1–4 and the access token and artifact retention of phase 5 are implemented. Not available yet: cleanup after cancel, revision diff view. See [STATUS.md](STATUS.md) for the exact list.
 
 ## Known technical limits
 
-- DNS TOCTOU between the SSRF check and the real connection (see [security.md](security.md)).
+- DNS TOCTOU between the SSRF check and the real connection of API steps; browser traffic connects to the checked IP through the runner's proxy (see [security.md](security.md)).
+- Login sessions keep cookies, localStorage and IndexedDB only — not sessionStorage, passkeys/WebAuthn or server-side token refresh. An expired session shows up as a failing step on the first page that needs a login; FlowCheck does not claim the cause.
 - Templates have no escape syntax: a literal `{{` cannot be written in a templated field.
 - Browser context isolation does not clean server-side data; only explicit cleanup steps do.
 - The duplicate-request check for network checks (phase 3) uses a 500 ms window and cannot exclude all later duplicates.
+- Recorder: locator uniqueness is checked in the page at the moment of the action; the run is the final check (`AMBIGUOUS_LOCATOR` / `LOCATOR_NOT_FOUND`). Navigations the page starts itself are told apart from the tester's own (address bar) with the browser's Navigation API; this was verified with a browser-initiated navigation over CDP, not by typing into a real address bar. Suggested checks are what happened while recording — a bug at that moment would become the expectation if the tester keeps the suggestion. Events created by page scripts (untrusted), e.g. a custom dropdown that sets a select's value in JavaScript, are not recorded.

@@ -39,7 +39,7 @@ const TEMPLATE_STEPS: Record<TemplateId, () => Step[]> = {
       name: `${s.fill}: Password`,
       type: 'fill',
       locator: { kind: 'label', value: 'Password', exact: true },
-      value: 'change-me',
+      value: '{{secrets.testPassword}}',
     },
     { id: newStepId(), name: `${s.click}: Log in`, type: 'click', locator: { kind: 'role', role: 'button', name: 'Log in' } },
     {

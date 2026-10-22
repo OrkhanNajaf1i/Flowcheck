@@ -1,18 +1,86 @@
-import type { ArtifactRow, EnvironmentRow, ProjectRow, RevisionRow, RunRow, StepRunRow, TestCaseWithLastRun } from '@flowcheck/db';
+import type {
+  ArtifactRow,
+  AuthCaptureRow,
+  AuthProfileRow,
+  EnvironmentRow,
+  ProjectRow,
+  RecordingRow,
+  RevisionRow,
+  RunRow,
+  SecretInfo,
+  StepRunRow,
+  TestCaseWithLastRun,
+} from '@flowcheck/db';
 import {
   type ArtifactDto,
+  type AuthCaptureDto,
+  type AuthProfileDto,
+  buildRecordedSteps,
   type EnvironmentDto,
   type EnvironmentSnapshot,
   effectiveAllowedOrigins,
   type ProjectDto,
+  type RecordedEvent,
+  type RecordingDto,
   type RevisionDto,
   type RunDto,
+  type SecretDto,
   type StepRunDto,
   type TestCaseDto,
 } from '@flowcheck/shared';
 
 const iso = (ms: number) => new Date(ms).toISOString();
 const isoOrNull = (ms: number | null) => (ms === null ? null : iso(ms));
+
+export function authProfileDto(row: AuthProfileRow): AuthProfileDto {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    environmentId: row.environmentId,
+    name: row.name,
+    createdAt: iso(row.createdAt),
+    updatedAt: iso(row.updatedAt),
+  };
+}
+
+export function authCaptureDto(row: AuthCaptureRow): AuthCaptureDto {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    environmentId: row.environmentId,
+    profileName: row.profileName,
+    startPath: row.startPath,
+    status: row.status,
+    error: row.error,
+    authProfileId: row.authProfileId,
+    createdAt: iso(row.createdAt),
+    finishedAt: isoOrNull(row.finishedAt),
+  };
+}
+
+/** Draft steps are derived from the stored events on every read (single source of truth). */
+export function recordingDto(row: RecordingRow, events: RecordedEvent[]): RecordingDto {
+  const { steps, warnings, suggestions } = buildRecordedSteps(events, row.startPath);
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    environmentId: row.environmentId,
+    testCaseId: row.testCaseId,
+    startPath: row.startPath,
+    status: row.status,
+    error: row.error,
+    eventCount: events.length,
+    steps,
+    warnings,
+    suggestions,
+    createdAt: iso(row.createdAt),
+    finishedAt: isoOrNull(row.finishedAt),
+  };
+}
+
+export function secretDto(row: SecretInfo): SecretDto {
+  return { id: row.id, projectId: row.projectId, name: row.name, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) };
+}
 
 export function projectDto(row: ProjectRow): ProjectDto {
   return { id: row.id, name: row.name, description: row.description, createdAt: iso(row.createdAt), updatedAt: iso(row.updatedAt) };

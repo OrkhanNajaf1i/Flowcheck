@@ -1,7 +1,10 @@
 import { z } from 'zod';
+import type { Step } from './definition.ts';
 import type { ErrorCode } from './errors.ts';
+import type { RecordedSuggestion, RecorderWarning } from './recorder.ts';
 import type { EnvironmentKind, RunStatus, StepPhase, StepStatus } from './status.ts';
 import { environmentKindSchema } from './status.ts';
+import { isValidVariableName } from './templates.ts';
 
 /**
  * Request bodies and response DTOs of the REST API (PROJECT_RULES §18).
@@ -204,4 +207,102 @@ export interface ArtifactDto {
   size: number;
   sensitive: boolean;
   createdAt: string;
+}
+
+// ---- Secrets ----
+
+export const createSecretSchema = z.strictObject({
+  name: z.string().refine(isValidVariableName, 'Use letters, digits and "_", starting with a letter, e.g. testPassword'),
+  /** Never echoed back. Minimum length is enforced by the server (SECRET_TOO_SHORT). */
+  value: z.string().min(1).max(10_000),
+});
+export const replaceSecretSchema = z.strictObject({ value: z.string().min(1).max(10_000) });
+export type CreateSecretBody = z.input<typeof createSecretSchema>;
+
+/** A secret as the API shows it: the value is never included. */
+export interface SecretDto {
+  id: string;
+  projectId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---- Login sessions (auth profiles) ----
+
+/** First page of a login capture or a recording, relative to the website address. */
+const startPathSchema = z
+  .string()
+  .max(500)
+  .regex(/^\/(?!\/)/, 'Must start with a single "/", e.g. /login')
+  .default('/');
+
+export const createAuthCaptureSchema = z.strictObject({
+  environmentId: id,
+  name,
+  /** Page opened first, e.g. /login. */
+  startPath: startPathSchema,
+});
+export type CreateAuthCaptureBody = z.input<typeof createAuthCaptureSchema>;
+
+export const AUTH_CAPTURE_STATUSES = ['starting', 'waiting_for_login', 'saving', 'saved', 'failed', 'cancelled'] as const;
+export type AuthCaptureStatus = (typeof AUTH_CAPTURE_STATUSES)[number];
+
+export interface AuthCaptureDto {
+  id: string;
+  projectId: string;
+  environmentId: string;
+  profileName: string;
+  startPath: string;
+  status: AuthCaptureStatus;
+  error: string | null;
+  authProfileId: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+/** A saved login session; the storage state itself is never returned. */
+export interface AuthProfileDto {
+  id: string;
+  projectId: string;
+  environmentId: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ---- Recorder ----
+
+export const RECORDER_LANGUAGES = ['en', 'az'] as const;
+export type RecorderLanguage = (typeof RECORDER_LANGUAGES)[number];
+
+export const createRecordingSchema = z.strictObject({
+  environmentId: id,
+  startPath: startPathSchema,
+  /** The test the draft is meant for (informational). */
+  testCaseId: id.optional(),
+  /** Language of the in-page recorder toolbar (the FlowCheck UI language). */
+  language: z.enum(RECORDER_LANGUAGES).default('en'),
+});
+export type CreateRecordingBody = z.input<typeof createRecordingSchema>;
+
+export const RECORDING_STATUSES = ['starting', 'recording', 'stopping', 'stopped', 'failed'] as const;
+export type RecordingStatus = (typeof RECORDING_STATUSES)[number];
+
+/** A recording with its draft steps, derived from the recorded events on every read. */
+export interface RecordingDto {
+  id: string;
+  projectId: string;
+  environmentId: string;
+  testCaseId: string | null;
+  startPath: string;
+  status: RecordingStatus;
+  error: string | null;
+  eventCount: number;
+  steps: Step[];
+  warnings: RecorderWarning[];
+  /** Checks suggested from what happened after the recorded actions; reviewed before they are added. */
+  suggestions: RecordedSuggestion[];
+  createdAt: string;
+  finishedAt: string | null;
 }

@@ -10,13 +10,26 @@ import {
   getTestCase,
   heartbeatRun,
   insertArtifact,
+  loadMasterKey,
   markStepRunning,
   newId,
   newSuffix,
+  RepoError,
   type RunRow,
+  revealAuthProfile,
+  revealSecrets,
 } from '@flowcheck/db';
-import { allSteps, type FailureSummary, type FinalRunStatus, parseDefinition, resolveInputs } from '@flowcheck/shared';
-import { type AbortReason, computeRunStatus, effectiveRunTimeout, runDefinition } from '@flowcheck/test-engine';
+import { allSteps, type FailureSummary, type FinalRunStatus, parseDefinition, referencedSecrets, resolveInputs } from '@flowcheck/shared';
+import {
+  type AbortReason,
+  CANCEL_CLEANUP_MS,
+  computeRunStatus,
+  effectiveRunTimeout,
+  runDefinition,
+  startTargetGuard,
+  type TargetGuard,
+  targetPolicy,
+} from '@flowcheck/test-engine';
 import type { Logger } from 'pino';
 import { type Browser, type BrowserContext, chromium } from 'playwright';
 import type { RunnerConfig } from './config.ts';
@@ -66,6 +79,23 @@ async function execute(
   if (!inputs.ok) {
     return { status: 'error', failureSummary: { code: 'VALIDATION_ERROR', message: inputs.issues.map((i) => i.message).join('; ') } };
   }
+  // Secrets are decrypted only now, only those the test uses, and never written to the run.
+  const projectIdForSecrets = getTestCase(db, run.testCaseId).projectId;
+  let secrets: Record<string, string>;
+  try {
+    secrets = revealSecrets(db, loadMasterKey(config.dataDir), projectIdForSecrets, referencedSecrets(definition));
+  } catch (error) {
+    if (error instanceof RepoError && error.code === 'SECRET_NOT_FOUND') {
+      return { status: 'error', failureSummary: { code: 'SECRET_NOT_FOUND', message: error.message } };
+    }
+    return {
+      status: 'error',
+      failureSummary: {
+        code: 'INTERNAL_ERROR',
+        message: 'Secrets could not be decrypted (is the master key the same as when they were saved?)',
+      },
+    };
+  }
   // The snapshot decides targets; the live environment only decides whether running is allowed.
   if (!getEnvironment(db, run.environmentId).enabled) {
     return {
@@ -91,6 +121,7 @@ async function execute(
 
   let browser: Browser | undefined;
   let context: BrowserContext | undefined;
+  let guard: TargetGuard | undefined;
   const forceClose = () => {
     void context?.close().catch(() => undefined);
   };
@@ -115,7 +146,9 @@ async function execute(
       if (cancellationRequestedAt !== null && !abort.signal.aborted) {
         log.info('cancellation requested');
         abortWith({ kind: 'cancelled' });
-        graceTimer = setTimeout(forceClose, config.cancelGraceMs);
+        // The engine stops the running step after the grace period and then runs cleanup (best
+        // effort, CANCEL_CLEANUP_MS). Closing the context is only the last resort if that hangs.
+        graceTimer = setTimeout(forceClose, config.cancelGraceMs + CANCEL_CLEANUP_MS + 10_000);
       }
     } catch (error) {
       log.error({ err: error }, 'heartbeat failed');
@@ -123,8 +156,27 @@ async function execute(
   }, config.heartbeatIntervalMs);
 
   try {
+    guard = await startTargetGuard(targetPolicy(run.environmentSnapshot));
     browser = await chromium.launch({ headless: !config.headed });
+    // A saved login session is loaded into the new context; it is never written back.
+    let storageState: Exclude<Parameters<Browser['newContext']>[0], undefined>['storageState'];
+    if (definition.authProfileId) {
+      const { profile, storageState: state } = revealAuthProfile(db, loadMasterKey(config.dataDir), definition.authProfileId);
+      if (profile.environmentId !== run.environmentId) {
+        return {
+          status: 'error',
+          failureSummary: {
+            code: 'AUTH_PROFILE_ENVIRONMENT_MISMATCH',
+            message: `The login session "${profile.name}" belongs to another website`,
+          },
+        };
+      }
+      storageState = state as typeof storageState;
+    }
     context = await browser.newContext({
+      // All browser traffic goes through the target guard (redirect hops included).
+      ...guard.contextOptions,
+      ...(storageState ? { storageState } : {}),
       // Service workers could bypass request interception and the target guard.
       serviceWorkers: 'block',
       acceptDownloads: false,
@@ -133,9 +185,12 @@ async function execute(
     const startedAt = new Date(run.startedAt ?? Date.now()).toISOString();
     const result = await runDefinition({
       context,
+      guard,
+      cancelGraceMs: config.cancelGraceMs,
       definition,
       environment: run.environmentSnapshot,
       inputs: inputs.values,
+      secrets,
       run: { id: run.id, startedAt, suffix: newSuffix() },
       signal: abort.signal,
       reporter: {
@@ -196,11 +251,17 @@ async function execute(
     shutdown.removeEventListener('abort', onShutdown);
     await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
+    await guard?.close().catch(() => undefined);
   }
 }
 
 function summarize(status: FinalRunStatus, result: Awaited<ReturnType<typeof runDefinition>>): FailureSummary | null {
-  if (status === 'passed' || status === 'cancelled') return null;
+  if (status === 'cancelled') {
+    return result.cleanupAfterCancelComplete === false
+      ? { code: 'CLEANUP_INCOMPLETE', message: 'The run was cancelled and its cleanup did not complete; test data may remain' }
+      : null;
+  }
+  if (status === 'passed') return null;
   if (result.abort?.kind === 'interrupted') return { code: result.abort.code, message: interruptMessage(result.abort.code) };
   if (result.primaryFailure) return result.primaryFailure;
   return { code: 'INTERNAL_ERROR', message: 'The run did not complete all required steps' };

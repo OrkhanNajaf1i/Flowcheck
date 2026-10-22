@@ -1,7 +1,9 @@
-import { type ApiRequestStep, type EnvironmentSnapshot, MUTATING_HTTP_METHODS, type Step } from '@flowcheck/shared';
+import { type ApiRequestStep, type EnvironmentSnapshot, MUTATING_HTTP_METHODS, type Step, stepNetworkChecks } from '@flowcheck/shared';
 import { type APIRequestContext, type APIResponse, type BrowserContext, errors, type Page, request } from 'playwright';
 import { StepError, type StepExecution, StepFailure } from './errors.ts';
 import { resolveSingle } from './locator.ts';
+import { type NetworkCheckResult, startNetworkWatch } from './network.ts';
+import { extractOutputs } from './outputs.ts';
 import { redactHeaders, redactJson, redactText, toPersistedBody } from './redact.ts';
 import { type AssertionResult, evaluateResponseAssertions } from './response-assertions.ts';
 import type { BlockedRequest } from './target-guard.ts';
@@ -44,6 +46,37 @@ function remaining(ctx: StepContext): number {
 }
 
 export async function executeStep(step: Step, ctx: StepContext): Promise<StepExecution> {
+  const checks = stepNetworkChecks(step);
+  if (checks.length === 0) return executeAction(step, ctx);
+  // The listener must exist before the action starts (PROJECT_RULES §10).
+  const watch = startNetworkWatch(ctx.page, checks, ctx);
+  try {
+    const execution = await executeAction(step, ctx);
+    let results: NetworkCheckResult[];
+    try {
+      results = await watch.collect();
+    } catch (error) {
+      if (error instanceof StepFailure) {
+        // Keep the action's own evidence next to the failing network check.
+        const own = error.execution;
+        throw new StepFailure(error, {
+          expected: { ...(execution.expected as object), ...(own.expected as object) },
+          actual: { ...(execution.actual as object), ...(own.actual as object) },
+        });
+      }
+      throw error;
+    }
+    return {
+      expected: { ...(execution.expected as object), networkChecks: results.map((r) => r.expected) },
+      actual: { ...(execution.actual as object), networkChecks: results.map((r) => r.actual) },
+      outputs: Object.assign({}, ...results.map((r) => r.outputs)),
+    };
+  } finally {
+    watch.stop();
+  }
+}
+
+async function executeAction(step: Step, ctx: StepContext): Promise<StepExecution> {
   switch (step.type) {
     case 'navigate':
       return navigate(step.url, ctx);
@@ -247,7 +280,14 @@ async function apiRequest(step: ApiRequestStep, ctx: StepContext): Promise<StepE
 
   const failure = firstFailure(results);
   if (failure) throw new StepFailure(failure, { expected, actual });
-  return { expected, actual };
+  let outputs: Record<string, string | number | boolean | null> = {};
+  try {
+    outputs = extractOutputs(step.outputs ?? [], { status: response.status(), headers: responseHeaders, body: responseBody });
+  } catch (error) {
+    if (error instanceof StepError) throw new StepFailure(error, { expected, actual });
+    throw error;
+  }
+  return { expected, actual: { ...actual, outputs: redactJson(outputs, secrets) }, outputs };
 }
 
 function hasStatusAssertion(step: ApiRequestStep): boolean {

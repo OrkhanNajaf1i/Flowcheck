@@ -2,13 +2,15 @@ import { closestCenter, DndContext, type DragEndEvent, KeyboardSensor, PointerSe
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { StepType } from '@flowcheck/shared';
-import { Plus } from 'lucide-react';
+import { Circle, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useFieldArray, useFormContext } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { RecordDialog } from '@/features/recorder/record-dialog';
 import { t } from '@/i18n';
-import { blankStep, type EditorForm, type Phase } from './definition-form';
+import { blankStep, type EditorForm, type Phase, recordedStepsToForm } from './definition-form';
+import { useEditorContext } from './editor-context';
 import { STEP_GROUPS, STEP_ICONS, StepCard } from './step-card';
 
 const TITLES: Record<Phase, { title: string; hint: string }> = {
@@ -26,6 +28,8 @@ export function PhaseSection({ phase, issues }: { phase: Phase; issues: Map<stri
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
   const [picking, setPicking] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const { projectId, testCaseId } = useEditorContext();
   // Steps added in this session open automatically so the tester can fill them in.
   const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
 
@@ -71,10 +75,26 @@ export function PhaseSection({ phase, issues }: { phase: Phase; issues: Map<stri
           </div>
         </SortableContext>
       </DndContext>
-      <Button variant={phase === 'steps' ? 'default' : 'outline'} size="sm" className="self-start" onClick={() => setPicking(true)}>
-        <Plus /> {t.editor.addStep}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant={phase === 'steps' ? 'default' : 'outline'} size="sm" onClick={() => setPicking(true)}>
+          <Plus /> {t.editor.addStep}
+        </Button>
+        {phase === 'steps' ? (
+          <Button variant="outline" size="sm" onClick={() => setRecording(true)}>
+            <Circle className="fill-current text-destructive" /> {t.recorder.record}
+          </Button>
+        ) : null}
+      </div>
       {picking ? <StepPicker onPick={add} onClose={() => setPicking(false)} /> : null}
+      {recording ? (
+        <RecordDialog
+          projectId={projectId}
+          testCaseId={testCaseId}
+          mainIsEmpty={steps.fields.length === 0}
+          onAdd={(recorded) => steps.append(recordedStepsToForm(recorded))}
+          onClose={() => setRecording(false)}
+        />
+      ) : null}
     </>
   );
 

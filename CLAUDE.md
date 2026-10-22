@@ -50,8 +50,8 @@ pnpm workspace. `apps/server` (Fastify) and `apps/runner` (Playwright worker) ar
 ## Commands (all verified)
 ```
 corepack enable && pnpm install
-pnpm playwright:install          # Chromium for the pinned Playwright version (never `pnpm dlx`)
-pnpm start                       # server + runner, UI at http://127.0.0.1:4310 (builds UI on first start)
+pnpm playwright:install          # Chromium for the pinned Playwright version (never `pnpm dlx`); pnpm start also does it via scripts/preflight.mjs
+pnpm start                       # preflight (Node 24, deps, Chromium) + server + runner, UI at http://127.0.0.1:4310 (rebuilds UI when outdated)
 pnpm start:with-demo             # + demo shop on 4320
 pnpm dev                         # Vite UI on 5173 + server + runner with --watch
 pnpm build:web                   # rebuild UI for pnpm start
@@ -59,4 +59,4 @@ pnpm check                       # biome + typecheck + unit/integration tests
 pnpm e2e                         # builds UI; API + UI acceptance tests on ports 4420/4410
 pnpm db:generate                 # after editing packages/db/src/schema.ts
 ```
-The owner may already run FlowCheck on 4310 with real data in `./data`. For manual verification use another port and data dir (`FLOWCHECK_SERVER_PORT`, `FLOWCHECK_DATA_DIR`) — never send test requests to the owner's instance.
+The owner may already run FlowCheck on 4310 with real data in `./data`. For manual verification use another port and data dir (`FLOWCHECK_SERVER_PORT`, `FLOWCHECK_DATA_DIR`) — never send test requests to the owner's instance. Every `/api` request needs the session cookie: set `FLOWCHECK_ACCESS_TOKEN` (≥ 32 chars) and open `/api/session?token=…`, or send the cookie from `sessionValue()`.

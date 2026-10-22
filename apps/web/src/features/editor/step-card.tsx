@@ -1,11 +1,12 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
 import {
   ARIA_ROLES,
+  type BaseLocator,
   COMMON_KEYS,
   HTTP_METHODS,
-  JSON_VALUE_TYPES,
   looksGeneratedId,
   MUTATING_HTTP_METHODS,
+  NETWORK_CHECK_STEP_TYPES,
   type StepType,
 } from '@flowcheck/shared';
 import {
@@ -35,16 +36,12 @@ import { type Path, useFieldArray, useFormContext, useWatch } from 'react-hook-f
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
+import { PlainPasswordWarning, SecretPicker } from '@/features/secrets/secrets-panel';
 import { t } from '@/i18n';
-import {
-  type AssertionKind,
-  blankAssertion,
-  type EditorForm,
-  type LocatorKind,
-  type Phase,
-  type StepForm,
-  stepSummary,
-} from './definition-form';
+import { blankAssertion, type EditorForm, type LocatorKind, type Phase, type StepForm, stepSummary } from './definition-form';
+import { useEditorContext } from './editor-context';
+import { AssertionsEditor, NetworkChecksSection, OutputsEditor } from './response-editors';
+import { SuggestFromHtmlDialog } from './suggest-dialog';
 
 /** Step types grouped the way the picker shows them. */
 export const STEP_GROUPS: { id: 'actions' | 'checks' | 'api'; types: StepType[] }[] = [
@@ -82,7 +79,6 @@ const LOCATOR_STEPS: ReadonlySet<StepType> = new Set([
   'assertValue',
   'assertEnabled',
 ]);
-const ASSERTION_KINDS = Object.keys(t.steps.assertionKinds) as AssertionKind[];
 
 export interface StepCardProps {
   phase: Phase;
@@ -94,7 +90,14 @@ export interface StepCardProps {
   defaultOpen?: boolean;
 }
 
+/** A password-like field filled with literal text instead of a secret. */
+function looksLikePlainPassword(step: StepForm): boolean {
+  const target = `${step.locator.value} ${step.locator.attrName}`;
+  return /pass|parol|şifr|sifr|secret/i.test(target) && step.value.trim() !== '' && !step.value.includes('{{secrets.');
+}
+
 export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOpen = false }: StepCardProps) {
+  const { projectId } = useEditorContext();
   const { register, setValue, getValues } = useFormContext<EditorForm>();
   const prefix = `${phase}.${index}` as const;
   const step = useWatch<EditorForm, `${Phase}.${number}`>({ name: prefix }) as StepForm;
@@ -177,9 +180,13 @@ export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOp
           {step.type === 'assertHidden' ? <p className="text-xs text-muted-foreground">{t.steps.hiddenRule}</p> : null}
 
           {step.type === 'fill' ? (
-            <Field label={t.steps.value} htmlFor={`${prefix}-value`} error={err('value')}>
-              <Input id={`${prefix}-value`} {...register(`${prefix}.value`)} />
-            </Field>
+            <div className="flex flex-col gap-2">
+              <Field label={t.steps.value} htmlFor={`${prefix}-value`} error={err('value')}>
+                <Input id={`${prefix}-value`} aria-invalid={!!err('value')} {...register(`${prefix}.value`)} />
+              </Field>
+              <SecretPicker projectId={projectId} onPick={(ref) => setValue(`${prefix}.value`, ref, { shouldDirty: true })} />
+              {looksLikePlainPassword(step) ? <PlainPasswordWarning /> : null}
+            </div>
           ) : null}
 
           {step.type === 'assertText' ? (
@@ -272,6 +279,8 @@ export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOp
 
           {step.type === 'apiRequest' ? <ApiFields prefix={prefix} err={err} /> : null}
 
+          {(NETWORK_CHECK_STEP_TYPES as readonly string[]).includes(step.type) ? <NetworkChecksSection prefix={prefix} err={err} /> : null}
+
           <details className="text-sm">
             <summary className="cursor-pointer text-xs text-muted-foreground">{t.common.advanced}</summary>
             <div className="mt-2 max-w-60">
@@ -279,6 +288,15 @@ export function StepCard({ phase, index, issues, onRemove, dragHandle, defaultOp
                 <Input id={`${prefix}-timeout`} inputMode="numeric" {...register(`${prefix}.timeoutMs`)} />
               </Field>
             </div>
+            {step.type !== 'apiRequest' ? (
+              <label className="mt-3 flex items-start gap-2 text-xs">
+                <input type="checkbox" className="mt-0.5" {...register(`${prefix}.screenshot`)} />
+                <span>
+                  {t.steps.screenshotAfter}
+                  <span className="block text-muted-foreground">{t.steps.screenshotAfterHint}</span>
+                </span>
+              </label>
+            ) : null}
           </details>
 
           {stepIssues.length > 0 ? (
@@ -338,8 +356,17 @@ function LocatorFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => 
 
 /** "Find the element by" + its value fields; used for the element and for its container. */
 function LocatorKindFields({ path, idBase, err }: { path: LocatorPath; idBase: string; err: (sub: string) => string | undefined }) {
-  const { register } = useFormContext<EditorForm>();
+  const { register, setValue } = useFormContext<EditorForm>();
   const reg = (field: string) => register(`${path}.${field}` as Path<EditorForm>);
+  const fill = (locator: BaseLocator) => {
+    const set = (field: string, value: unknown) =>
+      setValue(`${path}.${field}` as Path<EditorForm>, value as never, { shouldDirty: true, shouldValidate: false });
+    set('kind', locator.kind);
+    set('value', locator.kind === 'role' ? locator.name : locator.value);
+    if (locator.kind === 'role') set('role', locator.role);
+    if (locator.kind === 'attribute') set('attrName', locator.name);
+    if ('exact' in locator) set('exact', locator.exact);
+  };
   const kind = useWatch({ name: `${path}.kind` as Path<EditorForm> }) as LocatorKind;
   const value = useWatch({ name: `${path}.value` as Path<EditorForm> }) as string | undefined;
   const valueError = err('value') ?? err('name');
@@ -399,6 +426,7 @@ function LocatorKindFields({ path, idBase, err }: { path: LocatorPath; idBase: s
         </label>
       ) : null}
       {kind === 'css' ? <p className="text-xs text-warning">⚠ {t.steps.fragile}</p> : null}
+      <SuggestFromHtmlDialog onPick={fill} />
     </>
   );
 }
@@ -406,10 +434,7 @@ function LocatorKindFields({ path, idBase, err }: { path: LocatorPath; idBase: s
 function ApiFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => string | undefined }) {
   const { register, control } = useFormContext<EditorForm>();
   const headers = useFieldArray({ control, name: `${prefix}.headers` });
-  const assertions = useFieldArray({ control, name: `${prefix}.assertions` });
   const method = useWatch<EditorForm, `${Phase}.${number}.method`>({ name: `${prefix}.method` });
-  const kinds = useWatch<EditorForm, `${Phase}.${number}.assertions`>({ name: `${prefix}.assertions` }) ?? [];
-  const hasStatus = kinds.some((a) => a.kind === 'statusEquals' || a.kind === 'statusIn');
 
   return (
     <div className="flex flex-col gap-3">
@@ -442,68 +467,8 @@ function ApiFields({ prefix, err }: { prefix: Prefix; err: (sub: string) => stri
         <p className="text-xs text-muted-foreground">{t.steps.mutatingNote}</p>
       ) : null}
 
-      <div className="flex flex-col gap-2 rounded-md bg-muted/60 p-3">
-        <span className="text-xs font-medium text-muted-foreground">{t.steps.assertions}</span>
-        {!hasStatus ? <p className="text-xs text-warning">⚠ {t.steps.noStatusWarning}</p> : null}
-        {assertions.fields.map((field, i) => {
-          const kind = kinds[i]?.kind ?? 'statusEquals';
-          const needsPointer = kind.startsWith('json');
-          const needsName = kind === 'headerEquals' || kind === 'headerContains';
-          const needsExpected = kind !== 'jsonExists';
-          const expectedError = err(`assertions.${i}.expected`);
-          return (
-            <div key={field.id} className="grid items-start gap-2 md:grid-cols-[190px_1fr_1fr_auto]">
-              <Select aria-label={t.steps.check} {...register(`${prefix}.assertions.${i}.kind`)}>
-                {ASSERTION_KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {t.steps.assertionKinds[k]}
-                  </option>
-                ))}
-              </Select>
-              {needsPointer ? (
-                <Field label={t.steps.pointer} error={err(`assertions.${i}.pointer`)} hint={t.steps.pointerHint}>
-                  <Input placeholder="/id" {...register(`${prefix}.assertions.${i}.pointer`)} />
-                </Field>
-              ) : needsName ? (
-                <Field label={t.steps.headerName} error={err(`assertions.${i}.name`)}>
-                  <Input placeholder="content-type" {...register(`${prefix}.assertions.${i}.name`)} />
-                </Field>
-              ) : (
-                <div />
-              )}
-              {needsExpected ? (
-                kind === 'jsonType' ? (
-                  <Field label={t.steps.expected}>
-                    <Select {...register(`${prefix}.assertions.${i}.expected`)}>
-                      {JSON_VALUE_TYPES.map((jt) => (
-                        <option key={jt} value={jt}>
-                          {jt}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                ) : (
-                  <Field
-                    label={kind === 'statusIn' ? t.steps.statusList : t.steps.expected}
-                    error={expectedError}
-                    hint={kind === 'jsonEquals' ? t.steps.expectedJsonHint : undefined}
-                  >
-                    <Input aria-invalid={!!expectedError} {...register(`${prefix}.assertions.${i}.expected`)} />
-                  </Field>
-                )
-              ) : (
-                <div />
-              )}
-              <Button variant="ghost" size="icon" aria-label={t.common.delete} onClick={() => assertions.remove(i)}>
-                <Trash2 />
-              </Button>
-            </div>
-          );
-        })}
-        <Button variant="outline" size="sm" className="self-start" onClick={() => assertions.append(blankAssertion('statusEquals'))}>
-          <Plus /> {t.steps.addAssertion}
-        </Button>
-      </div>
+      <AssertionsEditor path={`${prefix}.assertions`} err={(sub) => err(`assertions.${sub}`)} />
+      <OutputsEditor path={`${prefix}.outputs`} err={(sub) => err(`outputs.${sub}`)} />
 
       <details className="text-sm" open={headers.fields.length > 0 || (method !== 'GET' && method !== 'HEAD')}>
         <summary className="cursor-pointer text-xs text-muted-foreground">

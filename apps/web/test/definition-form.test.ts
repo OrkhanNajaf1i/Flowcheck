@@ -9,7 +9,14 @@ const definition: TestDefinition = {
   setupSteps: [],
   steps: [
     { id: 'open', name: 'Open', type: 'navigate', url: '/' },
-    { id: 'click', name: 'Buy', type: 'click', locator: { kind: 'role', role: 'button', name: 'Buy now' }, timeoutMs: 5000 },
+    {
+      id: 'click',
+      name: 'Buy',
+      type: 'click',
+      locator: { kind: 'role', role: 'button', name: 'Buy now' },
+      timeoutMs: 5000,
+      screenshot: true,
+    },
     { id: 'fill', name: 'Email', type: 'fill', locator: { kind: 'label', value: 'Email', exact: true }, value: 'qa@example.test' },
     {
       id: 'api',
@@ -34,6 +41,7 @@ const definition: TestDefinition = {
 
 const allTypes: TestDefinition = {
   schemaVersion: 1,
+  authProfileId: 'profile-1',
   metadata: { tags: [] },
   inputs: [],
   setupSteps: [],
@@ -63,6 +71,36 @@ const allTypes: TestDefinition = {
     { id: 'uc', name: 'Uncheck', type: 'uncheck', locator: { kind: 'testId', value: 'terms' } },
     { id: 'p1', name: 'Press', type: 'press', key: 'Enter', locator: { kind: 'testId', value: 'q' } },
     { id: 'p2', name: 'Press page', type: 'press', key: 'Control+a' },
+    {
+      id: 'nc',
+      name: 'Place order',
+      type: 'click',
+      locator: { kind: 'testId', value: 'place-order' },
+      networkChecks: [
+        {
+          id: 'create',
+          name: 'Created',
+          match: { origin: 'api', method: 'POST', pathname: '/api/orders', query: { draft: 'false' } },
+          timeoutMs: 5000,
+          assertions: [{ kind: 'statusEquals', expected: 201 }],
+          outputs: [
+            { name: 'orderId', from: 'json', pointer: '/id' },
+            { name: 'loc', from: 'header', header: 'location' },
+          ],
+        },
+        { id: 'other', name: 'CDN', match: { origin: 'https://cdn.shop.test', method: 'GET', pathname: '/x.js' }, assertions: [] },
+      ],
+    },
+    {
+      id: 'ro',
+      name: 'Read',
+      type: 'apiRequest',
+      method: 'GET',
+      path: '/orders/{{outputs.orderId}}',
+      auth: { kind: 'browserCookies' },
+      assertions: [{ kind: 'statusEquals', expected: 200 }],
+      outputs: [{ name: 'total', from: 'json', pointer: '/total' }],
+    },
     {
       id: 'w1',
       name: 'Scoped',

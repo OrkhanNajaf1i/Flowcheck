@@ -1,7 +1,17 @@
-import { claimNextRun, interruptOrphanedRuns, openDatabase } from '@flowcheck/db';
+import {
+  claimAuthCapture,
+  claimNextRun,
+  claimRecording,
+  failOrphanedAuthCaptures,
+  failOrphanedRecordings,
+  interruptOrphanedRuns,
+  openDatabase,
+} from '@flowcheck/db';
 import pino from 'pino';
+import { runAuthCapture } from './auth-capture.ts';
 import { loadConfig } from './config.ts';
 import { executeRun } from './execute-run.ts';
+import { runRecording } from './recorder.ts';
 import { isWorkerAlive, newWorkerId } from './worker-id.ts';
 
 const config = loadConfig();
@@ -30,6 +40,25 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 while (!shutdown.signal.aborted) {
   try {
     interruptOrphanedRuns(handle.db, alive);
+    failOrphanedAuthCaptures(handle.db, alive);
+    failOrphanedRecordings(handle.db, alive);
+    // Captures and recordings hold the execution lock, so runs wait until they are finished.
+    const capture = claimAuthCapture(handle.db, workerId);
+    if (capture) {
+      log.info({ captureId: capture.id }, 'opening browser for login session capture');
+      busy = runAuthCapture(capture, { db: handle.db, config, log, shutdown: shutdown.signal });
+      await busy;
+      busy = null;
+      continue;
+    }
+    const recording = claimRecording(handle.db, workerId);
+    if (recording) {
+      log.info({ recordingId: recording.id }, 'opening browser for recording');
+      busy = runRecording(recording, { db: handle.db, config, log, shutdown: shutdown.signal });
+      await busy;
+      busy = null;
+      continue;
+    }
     const run = claimNextRun(handle.db, workerId);
     if (run) {
       log.info({ runId: run.id }, 'claimed run');

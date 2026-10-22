@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>App - Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:520px;margin:2rem auto;padding:0 1rem}nav{display:flex;gap:.5rem}[hidden]{display:none}</style>
+</head>
+<body>
+  <!-- Single-page app: routes change with history.pushState, the document is never reloaded (recorder test). -->
+  <nav>
+    <button type="button" data-route="/spa">Home</button>
+    <button type="button" data-route="/spa/settings">Settings</button>
+  </nav>
+  <main id="view"></main>
+  <script type="module">
+    const view = document.getElementById('view');
+    function render() {
+      view.replaceChildren();
+      if (location.pathname === '/spa/settings') {
+        const h1 = Object.assign(document.createElement('h1'), { textContent: 'Settings' });
+        const label = Object.assign(document.createElement('label'), { htmlFor: 'display-name', textContent: 'Display name' });
+        const input = Object.assign(document.createElement('input'), { id: 'display-name' });
+        const save = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Save settings' });
+        const saved = Object.assign(document.createElement('p'), { hidden: true });
+        saved.dataset.testid = 'saved';
+        save.addEventListener('click', () => {
+          saved.textContent = `Saved: ${input.value}`;
+          saved.hidden = false;
+        });
+        view.append(h1, label, input, save, saved);
+      } else {
+        // "Create new" opens a dialog (recorder check test: did the modal open?).
+        const create = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Create new' });
+        const dialog = Object.assign(document.createElement('div'), { hidden: true });
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-labelledby', 'new-item-title');
+        const title = Object.assign(document.createElement('h2'), { id: 'new-item-title', textContent: 'New item' });
+        const close = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Close' });
+        close.addEventListener('click', () => {
+          dialog.hidden = true;
+        });
+        create.addEventListener('click', () => {
+          dialog.hidden = false;
+        });
+        dialog.append(title, close);
+        view.append(Object.assign(document.createElement('h1'), { textContent: 'Home' }), create, dialog);
+      }
+    }
+    for (const button of document.querySelectorAll('[data-route]')) {
+      button.addEventListener('click', () => {
+        history.pushState({}, '', button.dataset.route);
+        render();
+      });
+    }
+    addEventListener('popstate', render);
+    render();
+  </script>
+</body>
+</html>

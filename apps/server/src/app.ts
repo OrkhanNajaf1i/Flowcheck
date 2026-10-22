@@ -2,13 +2,19 @@ import helmet from '@fastify/helmet';
 import type { FlowDb } from '@flowcheck/db';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serializerCompiler, validatorCompiler, type ZodTypeProvider } from 'fastify-type-provider-zod';
+import { registerAccess } from './access.ts';
 import type { ServerConfig } from './config.ts';
 import { registerErrorHandling } from './errors.ts';
 import { apiRoutes } from './routes.ts';
 import { registerLocalSecurity } from './security.ts';
 import { registerWebUi } from './web-ui.ts';
 
-export async function buildServer(db: FlowDb, config: ServerConfig, options: { logger?: boolean } = {}): Promise<FastifyInstance> {
+/** `accessToken`: the local access token (PROJECT_RULES §17); every /api request needs its session cookie. */
+export async function buildServer(
+  db: FlowDb,
+  config: ServerConfig,
+  options: { accessToken: string; logger?: boolean },
+): Promise<FastifyInstance> {
   const app = Fastify({
     logger: options.logger ?? false,
     bodyLimit: 1024 * 1024,
@@ -18,6 +24,7 @@ export async function buildServer(db: FlowDb, config: ServerConfig, options: { l
   app.setSerializerCompiler(serializerCompiler);
 
   registerLocalSecurity(app, config);
+  registerAccess(app, config, options.accessToken);
   await app.register(helmet, {
     contentSecurityPolicy: {
       directives: {

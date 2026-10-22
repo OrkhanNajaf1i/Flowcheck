@@ -2,39 +2,61 @@ import { createReadStream, rmSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import {
   archiveTestCase,
+  createAuthCapture,
   createEnvironment,
   createProject,
+  createRecording,
   createRevision,
   createRun,
+  createSecret,
   createTestCase,
+  deleteAuthProfile,
   deleteProject,
+  deleteSecret,
   duplicateTestCase,
   type FlowDb,
   getArtifact,
   getArtifacts,
+  getAuthCapture,
+  getAuthProfile,
   getEnvironment,
   getProject,
+  getRecording,
   getRevision,
   getRun,
   getStepRuns,
   getTestCase,
+  listAuthProfiles,
   listEnvironments,
   listProjects,
+  listRecordingEvents,
   listRevisions,
   listRunsForTestCase,
+  listSecrets,
   listTestCases,
+  loadMasterKey,
+  missingSecrets,
+  replaceSecretValue,
+  requestAuthCaptureCancel,
+  requestAuthCaptureSave,
   requestCancel,
+  requestRecordingStop,
   updateEnvironment,
   updateProject,
   updateTestCase,
 } from '@flowcheck/db';
 import {
+  createAuthCaptureSchema,
   createEnvironmentSchema,
   createProjectSchema,
+  createRecordingSchema,
   createRevisionSchema,
   createRunSchema,
+  createSecretSchema,
   createTestCaseSchema,
   parseDefinition,
+  referencedSecrets,
+  replaceSecretSchema,
   resolveInputs,
   type TestDefinition,
   updateEnvironmentSchema,
@@ -45,7 +67,18 @@ import {
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { ServerConfig } from './config.ts';
-import { environmentDto, environmentSnapshot, projectDto, revisionDto, runDto, testCaseDto } from './dto.ts';
+import {
+  authCaptureDto,
+  authProfileDto,
+  environmentDto,
+  environmentSnapshot,
+  projectDto,
+  recordingDto,
+  revisionDto,
+  runDto,
+  secretDto,
+  testCaseDto,
+} from './dto.ts';
 import { HttpError, validationError } from './errors.ts';
 
 const idParam = <K extends string>(name: K) => z.object({ [name]: z.string().min(1).max(64) } as Record<K, z.ZodString>);
@@ -63,6 +96,72 @@ function validateDefinition(input: unknown): { schemaVersion: number; definition
 
 export function apiRoutes(db: FlowDb, config: ServerConfig): FastifyPluginAsyncZod {
   return async (app) => {
+    const master = loadMasterKey(config.dataDir);
+    if (master.warning) app.log.warn(master.warning);
+
+    // ---- Login sessions: captured in a visible browser by the runner, stored encrypted ----
+    app.get('/projects/:projectId/auth-profiles', { schema: { params: idParam('projectId') } }, async (req) => {
+      getProject(db, req.params.projectId);
+      return listAuthProfiles(db, req.params.projectId).map(authProfileDto);
+    });
+    app.delete('/auth-profiles/:profileId', { schema: { params: idParam('profileId') } }, async (req, reply) => {
+      deleteAuthProfile(db, req.params.profileId);
+      return reply.code(204).send();
+    });
+    app.post(
+      '/projects/:projectId/auth-captures',
+      { schema: { params: idParam('projectId'), body: createAuthCaptureSchema } },
+      async (req, reply) => {
+        const capture = createAuthCapture(db, {
+          projectId: req.params.projectId,
+          environmentId: req.body.environmentId,
+          profileName: req.body.name,
+          startPath: req.body.startPath,
+        });
+        return reply.code(202).send(authCaptureDto(capture));
+      },
+    );
+    app.get('/auth-captures/:captureId', { schema: { params: idParam('captureId') } }, async (req) =>
+      authCaptureDto(getAuthCapture(db, req.params.captureId)),
+    );
+    app.post('/auth-captures/:captureId/save', { schema: { params: idParam('captureId') } }, async (req, reply) =>
+      reply.code(202).send(authCaptureDto(requestAuthCaptureSave(db, req.params.captureId))),
+    );
+    app.post('/auth-captures/:captureId/cancel', { schema: { params: idParam('captureId') } }, async (req, reply) =>
+      reply.code(202).send(authCaptureDto(requestAuthCaptureCancel(db, req.params.captureId))),
+    );
+
+    // ---- Recorder: the runner records in a visible browser; the draft is never saved by itself ----
+    app.post(
+      '/projects/:projectId/recordings',
+      { schema: { params: idParam('projectId'), body: createRecordingSchema } },
+      async (req, reply) => {
+        const recording = createRecording(db, { projectId: req.params.projectId, ...req.body });
+        return reply.code(202).send(recordingDto(recording, []));
+      },
+    );
+    app.get('/recordings/:recordingId', { schema: { params: idParam('recordingId') } }, async (req) =>
+      recordingDto(getRecording(db, req.params.recordingId), listRecordingEvents(db, req.params.recordingId)),
+    );
+    app.post('/recordings/:recordingId/stop', { schema: { params: idParam('recordingId') } }, async (req, reply) =>
+      reply.code(202).send(recordingDto(requestRecordingStop(db, req.params.recordingId), listRecordingEvents(db, req.params.recordingId))),
+    );
+
+    // ---- Secrets: values go in, never come out ----
+    app.get('/projects/:projectId/secrets', { schema: { params: idParam('projectId') } }, async (req) =>
+      listSecrets(db, req.params.projectId).map(secretDto),
+    );
+    app.post('/projects/:projectId/secrets', { schema: { params: idParam('projectId'), body: createSecretSchema } }, async (req, reply) =>
+      reply.code(201).send(secretDto(createSecret(db, master, req.params.projectId, req.body.name, req.body.value))),
+    );
+    app.put('/secrets/:secretId', { schema: { params: idParam('secretId'), body: replaceSecretSchema } }, async (req) =>
+      secretDto(replaceSecretValue(db, master, req.params.secretId, req.body.value)),
+    );
+    app.delete('/secrets/:secretId', { schema: { params: idParam('secretId') } }, async (req, reply) => {
+      deleteSecret(db, req.params.secretId);
+      return reply.code(204).send();
+    });
+
     // ---- Projects ----
     app.get('/projects', async () => listProjects(db).map(projectDto));
 
@@ -191,6 +290,13 @@ export function apiRoutes(db: FlowDb, config: ServerConfig): FastifyPluginAsyncZ
       if (!parsed.ok) {
         throw new HttpError(parsed.code, parsed.code === 'UNSUPPORTED_SCHEMA_VERSION' ? parsed.message : 'Stored definition is invalid');
       }
+      // A run never starts without the secrets it needs.
+      const missing = missingSecrets(db, testCase.projectId, referencedSecrets(parsed.definition));
+      if (missing.length > 0) {
+        throw new HttpError('SECRET_NOT_FOUND', `This test needs secret(s) that do not exist in the project: ${missing.join(', ')}`, {
+          missing,
+        });
+      }
       const inputs = resolveInputs(parsed.definition, req.body.inputs);
       if (!inputs.ok) {
         throw validationError(
@@ -204,6 +310,17 @@ export function apiRoutes(db: FlowDb, config: ServerConfig): FastifyPluginAsyncZ
         throw new HttpError('NOT_FOUND', `Environment ${environment.id} does not belong to this project`);
       }
       if (!environment.enabled) throw new HttpError('ENVIRONMENT_DISABLED', `Environment "${environment.name}" is disabled`);
+      // A login session belongs to one environment and is never used silently elsewhere.
+      if (parsed.definition.authProfileId) {
+        const profile = getAuthProfile(db, parsed.definition.authProfileId);
+        if (profile.environmentId !== environment.id) {
+          throw new HttpError(
+            'AUTH_PROFILE_ENVIRONMENT_MISMATCH',
+            `The login session "${profile.name}" belongs to another website. Choose that website or another login session.`,
+            { authProfileId: profile.id, environmentId: profile.environmentId },
+          );
+        }
+      }
 
       // Snapshot at creation: the run executes against what the tester saw when starting it.
       const run = createRun(db, {

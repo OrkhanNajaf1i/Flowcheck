@@ -414,6 +414,18 @@ Qeyd olunan əməliyyatlar testin düzgünlüyünün sübutu deyil. Assertion-la
 
 iframe, popup, yeni tab, file input, drag-and-drop və s. → warning; səssiz natamam qeyd yoxdur.
 
+[DÜZƏLİŞ #48] İmplementasiya qərarları:
+- Əmr kanalı `runner_commands` deyil, `recording_sessions` sətridir (`stop_requested_at`), auth capture kimi (#47). Route-lar layihə daxilindədir: `POST /api/projects/:id/recordings`, `GET /api/recordings/:id`, `POST /api/recordings/:id/stop`.
+- `draftSteps` sütunu saxlanılmır: draft hər oxunuşda event-lərdən qurulur (`buildRecordedSteps`) — tək həqiqət mənbəyi.
+- Locator unikallığı (§7 TÖVSİYƏ) runner-də `count()` ilə deyil, **hərəkət anında səhifənin özündə** yoxlanılır: klikdən sonra naviqasiya/DOM dəyişikliyi gecikmiş yoxlamanı etibarsız edərdi. Rol və ad üçün Chromium-un öz accessibility dəyərləri (`computedRole`/`computedName`) istifadə olunur. Birmənalı olmayan rol/mətn stabil konteynerə (`within`) bağlanır; heç nə tapılmasa CSS yolu + `fragileLocator` xəbərdarlığı. Son yoxlama run-un özüdür.
+- Yalnız `isTrusted` event-lər qeyd olunur (səhifə skriptlərinin süni event-ləri addım yaratmır). Qeyd edilmiş hərəkətdən sonra 3 s ərzindəki naviqasiya onun nəticəsi sayılır; SPA route dəyişikliyi addım yaratmır.
+- Parol dəyəri səhifədən heç vaxt göndərilmir; draft-da `{{secrets.password}}` + xəbərdarlıq.
+- [DÜZƏLİŞ #50] Overlay-də "Göründüyünü yoxla" və "Mətni yoxla" düymələri: tester düyməni basıb elementə klikləyir → `assertVisible` / `assertText` (exact, `innerText`) addımı. Bu klik səhifəyə çatmır (pointer/mouse/click event-ləri capture fazasında dayandırılır), Esc ləğv edir. Bu, "assertion avtomatik yaradılmır" qaydasına zidd deyil: yoxlamanı tester açıq şəkildə seçir. Toolbar FlowCheck UI-nin dilindədir (`language`: en/az).
+- [DÜZƏLİŞ #54] **Təklif olunan yoxlamalar.** Hər hərəkətdən (click, seçim, checkbox, Enter/Tab/Escape) sonra recorder nəyin dəyişdiyini müşahidə edir: 1.2 s ərzində **yeni görünən** dialog / mesaj (alert, status, live region) / başlıq, hərəkətin nəticəsi olan səhifə keçidi, hərəkətdən sonra 3 s ərzində göndərilən state-changing (POST/PUT/PATCH/DELETE) fetch/XHR sorğusu və onun statusu. Bunlar addım yox, **təklifdir**: tester baxış siyahısında hər birini görür və işarəsini götürə bilər. 2xx olmayan sorğu təklifi işarəsiz gəlir (qeyd zamanı bug ola bilər). Etibarlılıq qaydaları: kövrək (CSS) locator-la təklif verilmir; dəyişən rəqəmli mətn (`#10234`, saat) üçün mətn yox, "görünür" yoxlaması; id-li path (`/orders/123`) üçün sorğu yoxlaması verilmir; eyni hərəkətdən sonra iki dəfə görünən sorğu (run-da `AMBIGUOUS_NETWORK_MATCH` olardı) təklif edilmir; tester-in toolbar ilə açıq əlavə etdiyi yoxlama təkrar təklif edilmir. Bu, "assertion avtomatik həqiqət kimi yaradılmır" qaydasına uyğundur: heç bir yoxlama tester baxmadan testə düşmür. Qəbul testi: təkliflərlə qurulan test success mode-da keçir, `create-order-500`-də `ASSERTION_FAILED` ilə fail olur.
+- [DÜZƏLİŞ #54] Birbaşa naviqasiya (ünvan sətri) artıq vaxt pəncərəsi ilə deyil, **Navigation API** ilə ayrılır: səhifənin özü başlatdığı keçidlər (link, form, skript, `pushState`) `navigate` hadisəsi verir; brauzerin özündən edilən keçid vermir və həmişə "Open" addımı olur.
+- Overlay-də "Stop" düyməsi var (open shadow root, `data-flowcheck-recorder`). Limitlər: 30 dəqiqə, 2000 event. Brauzer bağlananda `stopped` + `browserClosed` xəbərdarlığı; runner ölərsə `failed`, event-lər saxlanılır.
+- Test-only: `FLOWCHECK_RECORDER_HEADLESS=1`, `FLOWCHECK_RECORDER_DEBUG_PORT` (e2e recorder brauzerinə CDP ilə qoşulub real, trusted event-lər yaradır).
+
 ---
 
 ## 9. API request məntiqi
@@ -545,6 +557,8 @@ Session expired → test faktiki uğursuz nəticəni göstərir; "mümkün auth 
 
 Auth capture execution lock-a daxildir. [TÖVSİYƏ] Auth capture brauzeri bağlanarsa → `cancelled`.
 
+[DÜZƏLİŞ #47] Server brauzeri özü aça bilməz (brauzer runner prosesindədir). Capture sessiyasının `auth_capture_sessions` sətri server → runner **əmr kanalıdır**: server `save_requested_at`/`cancel_requested_at` sahələrini yazır, runner polling ilə oxuyur; ayrıca `runner_commands` cədvəli lazım deyil. 60 s ərzində heç bir runner götürməyən və ya heartbeat-i kəsilən capture `failed` olur və lock buraxılır. Capture 15 dəqiqə ilə məhdudlaşır. Eyni sayt + ad ilə yenidən capture köhnə profili əvəz edir.
+
 ---
 
 ## 13. Runner və status məntiqi
@@ -591,6 +605,7 @@ Nümunə: gözlənilən mətn yoxdur → failed; API 201 əvəzinə 500 → fail
 - Grace period: [TÖVSİYƏ] **5 saniyə**; sonra context/browser məcburi bağlanır.
 - Cleanup best-effort-dir; [TÖVSİYƏ] cancel-dan sonra cleanup üçün ayrıca **15 saniyə** limit.
 - Cleanup uğursuz olsa belə status `cancelled`; hesabatda "cleanup tamamlanmadı, test datası qala bilər".
+- [DÜZƏLİŞ #55] İmplementasiya: grace bitəndə **context yox, yalnız səhifə** bağlanır (cookie-lər və login qalır); cleanup addımları yeni səhifədə, cəmi 15 s büdcə ilə işləyir; hər addımın deadline-ı bu büdcə ilə məhdudlaşır. Dəyişəni olmayan cleanup addımı (data heç yaranmayıb) uğursuzluq sayılmır. Cleanup tam keçməsə `failureSummary` = `CLEANUP_INCOMPLETE` (status yenə `cancelled`). Timeout və shutdown-da (`interrupted`) cleanup işləmir. Runner context-i yalnız son çarə kimi (grace + 15 s + 10 s) məcburi bağlayır.
 - Cancel idempotentdir (təkrar çağırış eyni nəticə, 200/202).
 - Brauzer prosesi açıq qalmamalıdır (finally blokunda `browser.close()`; runner çıxışında bütün browser-lər bağlanır).
 
@@ -653,6 +668,8 @@ Progress: **polling** TanStack Query `refetchInterval` ilə (aktiv run üçün 1
 
 Minimum: uğursuz UI addımında screenshot (mümkün olduqda), əlaqəli redacted network məlumatı, strukturlaşdırılmış error, step timing.
 
+[DÜZƏLİŞ #49] UI addımında istəyə bağlı `screenshot: true` — addım **keçəndən sonra** da screenshot saxlanılır (vizual sübut). Bu yoxlama deyil: nəyinsə göründüyünü (məs. modal) sübut etmək üçün `assertVisible` addımı lazımdır. Default söndürülüb (disk və şəxsi məlumat), `apiRequest`-də yoxdur, screenshot `sensitive` işarələnir.
+
 Redaction: `Authorization`, `Cookie`, `Set-Cookie`, `Proxy-Authorization` [TÖVSİYƏ], konfiqurasiya edilmiş secret header/body sahələri (JSON Pointer ilə), runtime-da məlum secret dəyərlər.
 
 - Body limit: **256 KB** persist üçün; böyük və binary body-lər tam saxlanılmır; truncation göstərilir.
@@ -667,6 +684,7 @@ Təhlükəsiz paylaşma:
 
 Retention: 30 gün; artefakt başına maks. 10 MB; layihə başına 500 MB. Limit keçəndə ən köhnə silinir. Silinmə xətaları loglanır. Run silinəndə artefaktlar da təmizlənir.
 - [TÖVSİYƏ] Retention işi server başlayanda və hər 6 saatdan bir işləyir; aktiv run-un artefaktlarına toxunmur.
+- [DÜZƏLİŞ #52] İmplementasiya: əvvəl yaşa görə (30 gün), sonra layihə kvotası (500 MB) — queued/running run-ların artefaktları kvotaya sayılır, amma silinmir; əvvəl DB sətirləri, sonra fayllar (fayl silinmə xətası loglanır). Konfiqurasiya: `FLOWCHECK_ARTIFACT_RETENTION_DAYS`, `FLOWCHECK_ARTIFACT_QUOTA_MB` (müsbət ədəd deyilsə server başlamır).
 - [TÖVSİYƏ] 10 MB-dan böyük artefakt saxlanılmır, əvəzində "artifact skipped: too large" qeydi.
 
 ---
@@ -681,6 +699,7 @@ Default yalnız `127.0.0.1`-də dinləyir. "Lokal = təhlükəsiz" fərziyyəsi 
 - GET heç vaxt state dəyişmir.
 - **Host header yoxlaması** (DNS rebinding): yalnız `127.0.0.1:<port>`, `localhost:<port>` qəbul olunur; qalanı → `403 HOST_NOT_ALLOWED`.
 - **Lokal bootstrap access** [TÖVSİYƏ: konkret mexanizm]: server başlayanda təsadüfi token yaradır və konsola `http://127.0.0.1:4310/?token=...` çap edir. İlk açılışda token `HttpOnly; SameSite=Strict` session cookie-yə çevrilir, URL-dən silinir. Bütün `/api` sorğuları bu cookie-ni tələb edir (`401 UNAUTHORIZED`). Token `data/` altında 0600 faylda saxlanılır ki, restart-dan sonra eyni qalsın (və ya hər dəfə yenilənsin — konfiqurasiya).
+- [DÜZƏLİŞ #51] İmplementasiya: link `http://127.0.0.1:<port>/api/session?token=…` (Vite dev-də 5173 portu ilə, proxy vasitəsilə işləyir); cookie adı `flowcheck_session_<port>` (cookie-lər port ayırmır, iki instance bir-birini əvəz etməsin), dəyəri tokenin HMAC-ı (token özü cookie-yə yazılmır), `HttpOnly; SameSite=Strict; Max-Age=30 gün` — session cookie əvəzinə, çünki token restart-dan sonra eyni qalır və hər brauzer açılışında linki axtarmaq UX-i pozur. Token: `data/access.token` və ya `FLOWCHECK_ACCESS_TOKEN` (≥ 32 simvol). Cookie-siz UI "FlowCheck-i öz linki ilə açın" izahını göstərir. §25 sual 2 bu default ilə bağlandı.
 - Runner server-in HTTP API-sini çağırmır (yalnız DB) — daxili token lazım deyil.
 - Credential-lar browser bundle-a yazılmır.
 
@@ -699,7 +718,7 @@ Default yalnız `127.0.0.1`-də dinləyir. "Lokal = təhlükəsiz" fərziyyəsi 
 |---|---|---|
 | Runner `apiRequest` (Node) | Göndərməzdən əvvəl URL parse + origin allowlist + DNS resolve + IP siyasəti; `maxRedirects: 0` | `ORIGIN_NOT_ALLOWED` / `SSRF_BLOCKED` |
 | Browser main document navigation + subresources | `context.route('**/*')`: origin allowlist-də deyilsə `route.abort('blockedbyclient')`, step-ə warning/xəta yazılır | main frame navigation → `ORIGIN_NOT_ALLOWED` (step failed); subresource → console/warning (səhifə üçüncü tərəf resursları yükləyə bilməz — CDN lazımdırsa allowlist-ə əlavə) |
-| Browser redirect-ləri | Hər redirect hop ayrıca request kimi `route`-dan keçir | eyni |
+| Browser redirect-ləri | [DÜZƏLİŞ #53] `route` yalnız ilk URL-i görür; hop-lar lokal yoxlayıcı proxy-də yoxlanılır | eyni (`ORIGIN_NOT_ALLOWED` / `SSRF_BLOCKED`) |
 | Service worker | `serviceWorkers: 'block'` | — |
 | WebSocket | İlk versiyada `routeWebSocket` ilə allowlist-dən kənar bağlantılar bloklanır (API mövcudluğu yoxlanılmalıdır); WS assertion-ları yoxdur | warning |
 
@@ -709,7 +728,8 @@ Default yalnız `127.0.0.1`-də dinləyir. "Lokal = təhlükəsiz" fərziyyəsi 
 - [DÜZƏLİŞ — tamamlandı] IPv6 ekvivalentləri: `::1`, `fe80::/10`, `fc00::/7`, IPv4-mapped `::ffff:0:0/96` (mapped ünvan IPv4 qaydası ilə yoxlanılır); həmçinin `0.0.0.0/8`, `100.64.0.0/10` (CGNAT).
 - **Həmişə bloklanır** (`allowPrivateNetwork` olsa belə): `169.254.169.254`, `fd00:ec2::254`, `metadata.google.internal` hostname-i, `100.100.100.200` (Alibaba).
 - DNS rebinding: resolve olunmuş **bütün** IP-lər yoxlanılır.
-- [DÜZƏLİŞ — dürüst məhdudiyyət] Playwright `APIRequestContext` və Chromium öz DNS resolve-unu edir; FlowCheck-in yoxlaması ilə faktiki qoşulma arasında TOCTOU pəncərəsi qalır. Bu risk README-də açıq yazılır; "tam SSRF qorunması" iddia olunmur.
+- [DÜZƏLİŞ — dürüst məhdudiyyət] Playwright `APIRequestContext` öz DNS resolve-unu edir; API addımlarında FlowCheck-in yoxlaması ilə faktiki qoşulma arasında TOCTOU pəncərəsi qalır. Bu risk README-də açıq yazılır; "tam SSRF qorunması" iddia olunmur.
+- [DÜZƏLİŞ #53] **Brauzer trafiki lokal yoxlayıcı proxy-dən keçir.** Playwright-ın route handler-i redirect zəncirinin yalnız ilk URL-ini görür (sənədləşdirilmiş davranış) — yuxarıdakı cədvəldəki "hər redirect hop route-dan keçir" iddiası yanlış idi və e2e testi icazəli origin-dən icazəsiz origin-ə redirect-in izlənildiyini göstərdi. İndi test/capture/recorder brauzerinin bütün trafiki (loopback daxil, `<-loopback>`) runner-dəki proxy-dən keçir: hər sorğu və hər redirect hop-u (HTTPS üçün CONNECT) origin + resolve olunmuş IP üzrə yoxlanılır və proxy **yoxladığı IP-yə özü qoşulur** — brauzer üçün DNS TOCTOU bağlanır. Route yoxlaması ilk sorğu üçün aydın xəta mesajı üçün qalır.
 
 Run icrasından əvvəl xəbərdarlıq (§15).
 
@@ -787,6 +807,7 @@ Validation həm frontend, həm backend-də (eyni Zod schema). Backend yeganə et
 | `NOT_FOUND` | **[DÜZƏLİŞ]** API resursu yoxdur |
 | `EXECUTION_LOCK_BUSY` | **[DÜZƏLİŞ]** §13 lock |
 | `PROJECT_HAS_ACTIVE_RUNS` | **[DÜZƏLİŞ]** növbədə/işləyən run olan layihə silinmir (409) |
+| `CLEANUP_INCOMPLETE` | **[DÜZƏLİŞ #55]** run ləğv edildi, cleanup tamamlanmadı — test datası qala bilər (yalnız `failureSummary`-də) |
 | `REVISION_CONFLICT` | **[DÜZƏLİŞ]** optimistic concurrency |
 | `UNSUPPORTED_SCHEMA_VERSION` | **[DÜZƏLİŞ]** §5 köhnə revision |
 | `AUTH_PROFILE_ENVIRONMENT_MISMATCH` | **[DÜZƏLİŞ]** §12 |
@@ -939,6 +960,19 @@ Hər mərhələnin sonunda hesabat:
 | 36 | §15 | İlk istifadədə nə edəcəyi aydın deyildi | Layihə səhifəsində 3 addımlı "Başlanğıc" bələdçisi, test şablonları (Login, Səhifədə mətn, API, Boş), ikonlu addım seçicisi, addımların bir sətirlik təsviri, xəta kodları üçün "Nəyi yoxlamaq lazımdır" ipucları (kök səbəb iddiası deyil) |
 | 39 | §6 | Addım növlərini istifadəçinin özünün yaratması təklif olundu | **Qərar:** addım növləri statik (engine kodu) qalır — istifadəçi tərəfindən yaradılan növ ixtiyari kod icrası olardı (§6 qadağası) və nəticənin etibarlılığını pozardı. İstifadəçi addımları (instance) sərbəst yaradır. Gələcək ideya: təkrar istifadə olunan **addım qrupları** (məs. "Login" bir dəfə yaradılıb bir neçə testdə istifadə) |
 | 40 | §6 | `assertText`/`assertValue`/`assertEnabled` son oxunuşda ~1 ms timeout alıb `INTERNAL_ERROR` verirdi (e2e tam suite-də aşkarlandı) | Oxunuşa minimum 500 ms; deadline-dan sonrakı timeout son müşahidə ilə `ASSERTION_FAILED` sayılır |
+| 46 | §11/§16 | Secret sayt tərəfindən URL-ə yazılanda (məs. `/done?name=<secret>`) addım sübutundakı `url` sahəsi açıq qalırdı | Redaksiya mərkəzləşdirildi: engine hər addımın bütün `expected`/`actual`-ını və xəta mesajını saxlamadan əvvəl məlum secret dəyərlərindən (düz, URL-encoded, base64) təmizləyir. Login şablonu parolu `{{secrets.testPassword}}`-dən oxuyur |
+| 55 | §13/§18 | Cancel-dan sonra cleanup işləmirdi (context 5 s sonra bağlanırdı); "cleanup tamamlanmadı" xəbərdarlığının kodu yox idi | Grace-dən sonra yalnız səhifə bağlanır, cleanup yeni səhifədə 15 s büdcə ilə; `CLEANUP_INCOMPLETE`; §13 [DÜZƏLİŞ #55] |
+| 54 | §8 | Tester hansı yoxlamaları əlavə etməli olduğunu bilmirdi; ünvan sətrindən 3 s ərzində edilən keçid itirdi və hərəkətin nəticəsi sayılırdı | Hərəkətdən sonra müşahidə olunanlardan təklif olunan yoxlamalar (baxışla, 2xx olmayan işarəsiz); birbaşa naviqasiya Navigation API ilə; §8 [DÜZƏLİŞ #54] |
+| 53 | §17 | "Hər redirect hop route-dan keçir" yanlış idi: Playwright route redirect hop-larını göstərmir; e2e icazəsiz origin-ə redirect-in izlənildiyini aşkar etdi | Brauzer trafiki üçün lokal yoxlayıcı proxy (bütün hop-lar, CONNECT, yoxlanmış IP-yə qoşulma); qəbul testləri 23, 26, 31 əlavə edildi |
+| 52 | §16 | Retention qaydası var idi, mexanizm yox | Yaş + layihə kvotası, aktiv run-lara toxunulmur, 6 saatdan bir; §16 [DÜZƏLİŞ #52] |
+| 51 | §17/§25 | Bootstrap token: session cookie hər brauzer açılışında linki tələb edirdi; cookie-lər port ayırmır; dev rejimində (Vite) `/?token=` serverə çatmırdı | `/api/session?token=` (proxy ilə də işləyir), port adlı cookie, HMAC dəyəri, 30 günlük cookie; §17 [DÜZƏLİŞ #51] |
+| 50 | §8 | Recorder yoxlama qeyd etmirdi; "modal açıldımı?" kimi yoxlamalar sonradan əl ilə qurulmalı idi | Toolbar-da tester tərəfindən seçilən `assertVisible`/`assertText`; seçim klik-i səhifəyə ötürülmür; toolbar UI dilində |
+| 49 | §16 | Keçən addımın nə göstərdiyini görmək mümkün deyildi (məs. "klik keçdi, amma modal açıldımı?") | UI addımında istəyə bağlı `screenshot: true` (keçəndən sonra şəkil); editorda izah: sübut üçün "Göründüyünü yoxla" addımı |
+| 48 | §8/§5/§18 | Recorder üçün: runner-də gecikmiş `count()` yoxlaması naviqasiyadan sonra etibarsızdır; `draftSteps` event-lərlə dublikat məlumat idi; `runner_commands` capture ilə uyğunsuz idi; süni (untrusted) event-lər saxta addım yarada bilərdi | Unikallıq hərəkət anında səhifədə (Chromium accessibility dəyərləri ilə) yoxlanılır; draft event-lərdən qurulur; sessiya sətri əmr kanalıdır; yalnız trusted event-lər; ətraflı §8 [DÜZƏLİŞ #48] |
+| 47 | §12 | Auth capture üçün server ilə runner arasında əmr mexanizmi müəyyən edilməmişdi (server brauzer aça bilməz) | Capture sətri əmr kanalıdır (save/cancel bayraqları, heartbeat, 60 s orphan timeout, 15 dəq limit); profil sayt + ad üzrə əvəz olunur; run dialoqu yalnız profilin saytını təklif edir, server başqasını `AUTH_PROFILE_ENVIRONMENT_MISMATCH` ilə rədd edir |
+| 44 | §10/#21 | Network check üçün sabit origin tələbi eyni testi local və staging-də işlətməyə mane olurdu | `match.origin`: `"api"` / `"frontend"` (run-un mühitindən götürülür) və ya açıq origin; hər halda allowlist-də olmalıdır (`ORIGIN_NOT_ALLOWED`). Output-lar: JSON Pointer və ya header-dən yalnız primitiv dəyər; yalnız addım (bütün network check-lər daxil) keçəndə publish olunur; ad təkrarı və əvvəlki addımda yaranmamış output istifadəsi save zamanı rədd edilir. Uyğun sorğu olmayanda hesabatda müşahidə olunan sorğuların siyahısı göstərilir |
+| 45 | §15 | Bəzi sahələrin label-i inputa bağlı deyildi (a11y; test də tapa bilmirdi) | `Field` `htmlFor` verilməyəndə özü id yaradıb bağlayır, hint/error `aria-describedby` ilə əlaqələndirilir |
+| 43 | §7 | DevTools-un "Copy selector / JS path / XPath" nəticələrini qəbul etmək təklif olundu | **Qəbul edilmədi** (avtomatik id-lər, Tailwind class-ları və `> div > div` yolları tez sınır; `document.querySelector(...)` kod icrası olardı). Əvəzində **"HTML-dən təklif et"**: "Copy element" HTML-i `DOMParser` ilə inert oxunur (skript icra olunmur), stabildən kövrəyə sıralanmış locator təklifləri verilir; class/DOM yolu heç vaxt təklif edilmir. Səhifədə unikallıq run zamanı yoxlanılır |
 | 42 | §7 | Eyni mətn bir neçə yerdə olanda (məs. iki "Axtar") yeganə çıxış `AMBIGUOUS_LOCATOR` idi, ayırmaq üçün vasitə yox idi | İstəyə bağlı **scope**: `locator.within` — konteyner locator-u (eyni növlər, bir səviyyə, iç-içə yox). Konteyner də tam bir elementə uyğun gəlməlidir (yoxsa `AMBIGUOUS_LOCATOR` / `LOCATOR_NOT_FOUND` "container" mesajı ilə); hədəf yalnız onun daxilində axtarılır. `assertHidden` bütün uyğun konteynerlərin daxilinə baxır |
 | 41 | §7 | Real saytlarda düymələr çox vaxt yalnız ikon + `aria-label`, ya da `id`/`name` atributu ilə tanınır; 6 locator növü azlıq edirdi | Əlavə növlər: `altText`, `title`, `id` (dəqiq dəyər), `attribute` (istənilən atribut adı + dəqiq dəyər, ad regex ilə yoxlanılır, dəyər CSS-də escape olunur — selector inyeksiyası mümkün deyil). Prioritet: testId → role (aria-label daxil) → label → placeholder → altText → title → text → id → attribute → css. Avtomatik yaradılmış id-lər (`reka-…-v-31`, `:r5:`, `radix-12`) üçün editor xəbərdarlığı |
 | 38 | §5/§18 | Səhvən yaradılmış layihəni silmək mümkün deyildi | `DELETE /api/projects/:id`: layihə bütün asılı datası (sayt, test, versiya, run, step, artefakt sətirləri və faylları) ilə **həmişəlik** silinir. Qoruma: UI-da layihə adını yazmaqla təsdiq; aktiv run varsa `PROJECT_HAS_ACTIVE_RUNS`. Test case üçün hard delete yoxdur qaydası dəyişmir (test yalnız arxivlənir) |

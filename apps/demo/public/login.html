@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sign in - Demo Shop</title>
+  <style>body{font-family:system-ui,sans-serif;max-width:420px;margin:2rem auto;padding:0 1rem}form{display:grid;gap:.75rem}[hidden]{display:none}</style>
+</head>
+<body>
+  <h1>Sign in</h1>
+  <form id="login">
+    <label for="username">Username</label>
+    <input id="username" autocomplete="username">
+    <label for="password">Password</label>
+    <input id="password" type="password" autocomplete="current-password">
+    <p role="alert" data-testid="login-error" hidden>Wrong username or password</p>
+    <button type="submit">Log in</button>
+  </form>
+  <script type="module">
+    document.getElementById('login').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username: document.getElementById('username').value, password: document.getElementById('password').value }),
+      });
+      if (res.ok) location.href = '/account';
+      else document.querySelector('[data-testid="login-error"]').hidden = false;
+    });
+  </script>
+</body>
+</html>

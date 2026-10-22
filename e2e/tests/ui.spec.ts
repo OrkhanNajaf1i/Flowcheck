@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
-import { createProjectWithEnv, createTest, DEMO, definition, SERVER, setDemoMode } from './helpers.ts';
+import { ACCESS_TOKEN } from '../playwright.config.ts';
+import { AUTH, createProjectWithEnv, createTest, DEMO, definition, SERVER, setDemoMode } from './helpers.ts';
 
 /**
  * Drives the real web UI (served by the FlowCheck server) the way a tester would.
@@ -153,7 +154,7 @@ test('the UI can be switched to Azerbaijani', async ({ page }) => {
 
 test('a project can be deleted only after typing its name', async ({ page }) => {
   const { projectId } = await createProjectWithEnv();
-  const project = (await (await fetch(`${SERVER}/api/projects/${projectId}`)).json()) as { name: string };
+  const project = (await (await fetch(`${SERVER}/api/projects/${projectId}`, { headers: AUTH })).json()) as { name: string };
   await page.goto(`${SERVER}/projects/${projectId}`);
   await page.getByRole('button', { name: 'Delete project' }).click();
   const dialog = page.getByRole('dialog');
@@ -164,7 +165,7 @@ test('a project can be deleted only after typing its name', async ({ page }) => 
   await dialog.getByLabel(/Type the project name/).fill(project.name);
   await confirm.click();
   await expect(page.getByRole('heading', { name: 'Projects' })).toBeVisible();
-  expect((await fetch(`${SERVER}/api/projects/${projectId}`)).status).toBe(404);
+  expect((await fetch(`${SERVER}/api/projects/${projectId}`, { headers: AUTH })).status).toBe(404);
 });
 
 test('new step types can be added in the editor and pass against the demo form', async ({ page }) => {
@@ -250,4 +251,157 @@ test('a step can search only inside another element', async ({ page }) => {
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await page.getByRole('button', { name: 'Start run' }).click();
   await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});
+
+test('pasting element HTML suggests stable locators and fills the step', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(projectId, definition([{ id: 'open', name: 'Open form', type: 'navigate', url: '/form' }]));
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await addStep(page, /^Click/);
+  const step = page.getByTestId('step-steps-1');
+
+  await step.getByRole('button', { name: 'Suggest from HTML' }).first().click();
+  const dialog = page.getByRole('dialog');
+  // As copied from DevTools: icon-only button with an auto-generated id and utility classes.
+  await dialog
+    .getByLabel('Element HTML')
+    .fill(
+      '<button type="button" id="reka-dropdown-menu-trigger-v-31" class="inline-flex items-center size-8" aria-label="Account" title="Your account"><svg></svg></button>',
+    );
+  const suggestions = dialog.getByRole('list', { name: 'Suggestions' }).getByRole('listitem');
+  await expect(suggestions.first()).toContainText('Most reliable');
+  await expect(suggestions.first()).toContainText('role button named "Account"');
+  await expect(suggestions.last()).toContainText('May change');
+  await suggestions.first().getByRole('button', { name: 'Use' }).click();
+
+  await expect(step.getByLabel('Find the element by')).toHaveValue('role');
+  await expect(step.getByLabel('Exact name (text on it)')).toHaveValue('Account');
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});
+
+test('a request check on a click keeps the order id for a later API step', async ({ page }) => {
+  await setDemoMode('success');
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(
+    projectId,
+    definition([
+      { id: 'open', name: 'Open shop', type: 'navigate', url: '/' },
+      { id: 'add', name: 'Add mug', type: 'click', locator: { kind: 'testId', value: 'add-to-cart-p-1' } },
+      { id: 'added', name: 'Added', type: 'assertVisible', locator: { kind: 'text', value: 'Blue Mug added to cart', exact: true } },
+      { id: 'cart', name: 'Open cart', type: 'navigate', url: '/cart' },
+      { id: 'place', name: 'Place order', type: 'click', locator: { kind: 'testId', value: 'place-order' } },
+    ]),
+  );
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+
+  const place = page.getByTestId('step-steps-4');
+  await place
+    .getByRole('button', { name: /Place order/ })
+    .first()
+    .click();
+  await place.getByText('Check the request this action sends').click();
+  await place.getByRole('button', { name: 'Add request check' }).click();
+  const check = place.getByTestId('network-check-0');
+  await check.getByLabel('Path').fill('/api/orders');
+  await check.getByLabel('Expected').fill('201');
+  await check.getByRole('button', { name: 'Keep a value' }).click();
+  await check.getByLabel('Variable name').fill('orderId');
+  await expect(check.getByText('Use it in later steps as {{outputs.orderId}}')).toBeVisible();
+
+  await addStep(page, /^API request/);
+  const read = page.getByTestId('step-steps-5');
+  await read.getByLabel('Path').fill('/orders/{{outputs.orderId}}');
+
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});
+
+test('secrets are added in the project and picked in a "Type text" step without showing the value', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(projectId, definition([{ id: 'open', name: 'Open form', type: 'navigate', url: '/form' }]));
+
+  await page.goto(`${SERVER}/projects/${projectId}`);
+  await page.getByRole('tab', { name: 'Secrets' }).click();
+  await page.getByRole('button', { name: 'Add secret' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Name').fill('testPassword');
+  await dialog.getByLabel('Value').fill('short');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.getByText(/at least 8 characters/).first()).toBeVisible();
+  await dialog.getByLabel('Value').fill('a-very-secret-value');
+  await dialog.getByRole('button', { name: 'Save' }).click();
+  await expect(page.getByText('Use as {{secrets.testPassword}}')).toBeVisible();
+  await expect(page.getByText('a-very-secret-value')).toHaveCount(0);
+
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await addStep(page, /^Type text/);
+  const step = page.getByTestId('step-steps-1');
+  await step.getByLabel('Element', { exact: true }).fill('password');
+  await step.getByLabel('Text to type').fill('hunter2-plain');
+  await expect(step.getByText('looks like a password typed as plain text')).toBeVisible();
+  await step.getByLabel('Use a secret:').selectOption('testPassword');
+  await expect(step.getByLabel('Text to type')).toHaveValue('{{secrets.testPassword}}');
+  await expect(step.getByText('looks like a password typed as plain text')).toHaveCount(0);
+});
+
+test('a login session is created from the website card, picked in the editor and used by the run', async ({ page }) => {
+  const { projectId } = await createProjectWithEnv();
+  const { testCaseId } = await createTest(
+    projectId,
+    definition([
+      { id: 'open', name: 'Open account', type: 'navigate', url: '/account' },
+      {
+        id: 'who',
+        name: 'Signed in',
+        type: 'assertText',
+        locator: { kind: 'testId', value: 'account-status' },
+        expected: 'Signed in as qa',
+        mode: 'exact',
+        timeoutMs: 3000,
+      },
+    ]),
+  );
+
+  await page.goto(`${SERVER}/projects/${projectId}`);
+  await page.getByRole('tab', { name: /Websites/ }).click();
+  await page.getByRole('button', { name: 'Create login session' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Session name').fill('QA user');
+  await dialog.getByLabel('Open first').fill('/auto-login/qa');
+  await dialog.getByRole('button', { name: 'Open browser' }).click();
+  await expect(dialog.getByTestId('capture-status')).toContainText('A browser window is open', { timeout: 20_000 });
+  await dialog.getByRole('button', { name: 'Save session' }).click();
+  await expect(dialog.getByTestId('capture-status')).toContainText('Session saved', { timeout: 20_000 });
+  await dialog.getByRole('button', { name: 'Close' }).first().click();
+  await expect(page.getByText('QA user')).toBeVisible();
+
+  await page.goto(`${SERVER}/tests/${testCaseId}`);
+  await page.getByLabel('Login session').selectOption({ label: 'QA user — for Local demo' });
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByText('Version 2')).toBeVisible();
+  await page.getByRole('button', { name: 'Run', exact: true }).click();
+  await expect(page.getByText('This test uses a login session')).toBeVisible();
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await expect(page.locator('h1 + span', { hasText: 'Passed' })).toBeVisible({ timeout: 30_000 });
+});
+
+test('a browser without the access link is told how to open FlowCheck; the printed link signs it in', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+  const page = await context.newPage();
+  await page.goto(SERVER);
+  await expect(page.getByText('Open FlowCheck with its link')).toBeVisible();
+  expect((await page.request.get(`${SERVER}/api/projects`)).status()).toBe(401);
+
+  await page.goto(`${SERVER}/api/session?token=${ACCESS_TOKEN}`);
+  // The token is removed from the address bar; the UI works with the cookie.
+  await expect(page).toHaveURL(`${SERVER}/`);
+  await expect(page.getByRole('button', { name: /New project|Create your first project/ }).first()).toBeVisible();
+  await context.close();
 });

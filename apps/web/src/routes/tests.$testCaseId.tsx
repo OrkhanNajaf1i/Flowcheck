@@ -11,7 +11,9 @@ import { Input, Textarea } from '@/components/ui/input';
 import { Field } from '@/components/ui/label';
 import { ErrorState, Loading, Notice } from '@/components/ui/states';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { LoginSessionPicker } from '@/features/auth/login-sessions';
 import { type EditorForm, issueKey, PHASES, toDefinition, toForm } from '@/features/editor/definition-form';
+import { EditorContext } from '@/features/editor/editor-context';
 import { InputsSection } from '@/features/editor/inputs-section';
 import { PhaseSection } from '@/features/editor/phase-section';
 import { RunDialog } from '@/features/editor/run-dialog';
@@ -148,157 +150,170 @@ function Editor({
   };
 
   return (
-    <FormProvider {...form}>
-      <form className="grid gap-4 lg:grid-cols-[1fr_280px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} noValidate>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <Link
-                to="/projects/$projectId"
-                params={{ projectId: testCase.projectId }}
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <ChevronLeft className="size-3" /> {t.project.tests}
-              </Link>
-              <p className="text-xs text-muted-foreground">
-                {t.editor.version(revisionNumber)}
-                {archived ? ` · ${t.tests.archived}` : ''}
-              </p>
+    <EditorContext.Provider value={{ projectId: testCase.projectId, testCaseId: testCase.id }}>
+      <FormProvider {...form}>
+        <form className="grid gap-4 lg:grid-cols-[1fr_280px]" onSubmit={form.handleSubmit((values) => save.mutate(values))} noValidate>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <Link
+                  to="/projects/$projectId"
+                  params={{ projectId: testCase.projectId }}
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  <ChevronLeft className="size-3" /> {t.project.tests}
+                </Link>
+                <p className="text-xs text-muted-foreground">
+                  {t.editor.version(revisionNumber)}
+                  {archived ? ` · ${t.tests.archived}` : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">{isDirty ? `● ${t.editor.unsavedShort}` : t.editor.noChanges}</span>
+                <Button type="submit" variant="outline" disabled={!isDirty || save.isPending || archived}>
+                  <Save /> {save.isPending ? t.common.saving : t.editor.saveRevision}
+                </Button>
+                <Button
+                  onClick={() => setRunning(true)}
+                  disabled={isDirty || archived || noEnvironment}
+                  title={isDirty ? t.editor.runSavedOnly : noEnvironment ? t.editor.noEnvironment : undefined}
+                >
+                  <Play /> {t.editor.run}
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">{isDirty ? `● ${t.editor.unsavedShort}` : t.editor.noChanges}</span>
-              <Button type="submit" variant="outline" disabled={!isDirty || save.isPending || archived}>
-                <Save /> {save.isPending ? t.common.saving : t.editor.saveRevision}
-              </Button>
-              <Button
-                onClick={() => setRunning(true)}
-                disabled={isDirty || archived || noEnvironment}
-                title={isDirty ? t.editor.runSavedOnly : noEnvironment ? t.editor.noEnvironment : undefined}
-              >
-                <Play /> {t.editor.run}
-              </Button>
-            </div>
+
+            {save.isError ? (
+              save.error instanceof ApiError && save.error.code === 'REVISION_CONFLICT' ? (
+                <ErrorState error={new Error(t.editor.conflict)} />
+              ) : (
+                <ErrorState error={save.error} />
+              )
+            ) : null}
+            {noEnvironment ? (
+              <Notice tone="warning">
+                <span className="flex flex-wrap items-center justify-between gap-2">
+                  {t.editor.noEnvironment}
+                  <Button size="sm" asChild>
+                    <Link to="/projects/$projectId" params={{ projectId: testCase.projectId }}>
+                      {t.editor.addWebsite}
+                    </Link>
+                  </Button>
+                </span>
+              </Notice>
+            ) : null}
+            {isDirty ? <Notice>{t.editor.runSavedOnly}</Notice> : null}
+
+            <Card>
+              <CardContent className="grid gap-3">
+                <Field label={t.tests.nameLabel} htmlFor="test-name" error={issues.get('name')}>
+                  <Input id="test-name" {...form.register('name')} />
+                </Field>
+                <Field label={`${t.common.description} (${t.common.optional})`} htmlFor="test-description">
+                  <Textarea id="test-description" rows={2} className="min-h-0 font-sans text-sm" {...form.register('description')} />
+                </Field>
+                <LoginSessionPicker
+                  projectId={testCase.projectId}
+                  value={form.watch('authProfileId')}
+                  onChange={(id) => form.setValue('authProfileId', id, { shouldDirty: true })}
+                />
+              </CardContent>
+            </Card>
+
+            <Tabs defaultValue="steps" onValueChange={(tab) => tab === 'json' && openJson()}>
+              <TabsList>
+                <TabsTrigger value="steps">{t.editor.steps}</TabsTrigger>
+                <TabsTrigger value="json">{t.editor.advanced}</TabsTrigger>
+              </TabsList>
+              <TabsContent value="steps" className="mt-3 flex flex-col gap-6">
+                <Card>
+                  <CardContent className="flex flex-col gap-6">
+                    {PHASES.map((phase) => (
+                      <PhaseSection key={phase} phase={phase} issues={issues} />
+                    ))}
+                  </CardContent>
+                </Card>
+                <details className="rounded-lg border border-border bg-card">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-medium">{t.editor.moreSettings}</summary>
+                  <div className="flex flex-col gap-4 border-t border-border p-4">
+                    <InputsSection issues={issues} />
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Field
+                        label={t.editor.defaultTimeout}
+                        htmlFor="default-timeout"
+                        error={issues.get('defaultTimeoutMs')}
+                        hint={t.editor.defaultTimeoutHint}
+                      >
+                        <Input id="default-timeout" inputMode="numeric" {...form.register('defaultTimeoutMs')} />
+                      </Field>
+                      <Field
+                        label={t.editor.runTimeout}
+                        htmlFor="run-timeout"
+                        error={issues.get('runTimeoutMs')}
+                        hint={t.editor.runTimeoutHint}
+                      >
+                        <Input id="run-timeout" inputMode="numeric" {...form.register('runTimeoutMs')} />
+                      </Field>
+                    </div>
+                  </div>
+                </details>
+              </TabsContent>
+              <TabsContent value="json" className="mt-3 flex flex-col gap-2">
+                <Suspense fallback={<Loading />}>
+                  <JsonEditor value={json} onChange={setJson} />
+                </Suspense>
+                {jsonError ? (
+                  <pre role="alert" className="whitespace-pre-wrap rounded-md bg-destructive/5 p-2 text-xs text-destructive">
+                    {jsonError}
+                  </pre>
+                ) : null}
+                <Button variant="outline" className="self-start" onClick={applyJson}>
+                  {t.editor.applyJson}
+                </Button>
+              </TabsContent>
+            </Tabs>
           </div>
 
-          {save.isError ? (
-            save.error instanceof ApiError && save.error.code === 'REVISION_CONFLICT' ? (
-              <ErrorState error={new Error(t.editor.conflict)} />
-            ) : (
-              <ErrorState error={save.error} />
-            )
-          ) : null}
-          {noEnvironment ? (
-            <Notice tone="warning">
-              <span className="flex flex-wrap items-center justify-between gap-2">
-                {t.editor.noEnvironment}
-                <Button size="sm" asChild>
-                  <Link to="/projects/$projectId" params={{ projectId: testCase.projectId }}>
-                    {t.editor.addWebsite}
-                  </Link>
-                </Button>
-              </span>
-            </Notice>
-          ) : null}
-          {isDirty ? <Notice>{t.editor.runSavedOnly}</Notice> : null}
-
-          <Card>
-            <CardContent className="grid gap-3">
-              <Field label={t.tests.nameLabel} htmlFor="test-name" error={issues.get('name')}>
-                <Input id="test-name" {...form.register('name')} />
-              </Field>
-              <Field label={`${t.common.description} (${t.common.optional})`} htmlFor="test-description">
-                <Textarea id="test-description" rows={2} className="min-h-0 font-sans text-sm" {...form.register('description')} />
-              </Field>
-            </CardContent>
-          </Card>
-
-          <Tabs defaultValue="steps" onValueChange={(tab) => tab === 'json' && openJson()}>
-            <TabsList>
-              <TabsTrigger value="steps">{t.editor.steps}</TabsTrigger>
-              <TabsTrigger value="json">{t.editor.advanced}</TabsTrigger>
-            </TabsList>
-            <TabsContent value="steps" className="mt-3 flex flex-col gap-6">
-              <Card>
-                <CardContent className="flex flex-col gap-6">
-                  {PHASES.map((phase) => (
-                    <PhaseSection key={phase} phase={phase} issues={issues} />
+          <aside className="flex flex-col gap-3">
+            <Card>
+              <CardHeader>
+                <CardTitle>{t.editor.history}</CardTitle>
+              </CardHeader>
+              {runs.isPending ? (
+                <Loading />
+              ) : runs.isError ? (
+                <ErrorState error={runs.error} />
+              ) : runs.data.length === 0 ? (
+                <p className="p-4 text-xs text-muted-foreground">{t.common.never}</p>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {runs.data.map((run) => (
+                    <li key={run.id}>
+                      <Link
+                        to="/runs/$runId"
+                        params={{ runId: run.id }}
+                        className="flex items-center justify-between gap-2 px-4 py-2 text-xs hover:bg-muted"
+                      >
+                        <StatusBadge status={run.status} />
+                        <span className="text-muted-foreground">{formatDateTime(run.createdAt)}</span>
+                      </Link>
+                    </li>
                   ))}
-                </CardContent>
-              </Card>
-              <details className="rounded-lg border border-border bg-card">
-                <summary className="cursor-pointer px-4 py-3 text-sm font-medium">{t.editor.moreSettings}</summary>
-                <div className="flex flex-col gap-4 border-t border-border p-4">
-                  <InputsSection issues={issues} />
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <Field
-                      label={t.editor.defaultTimeout}
-                      htmlFor="default-timeout"
-                      error={issues.get('defaultTimeoutMs')}
-                      hint={t.editor.defaultTimeoutHint}
-                    >
-                      <Input id="default-timeout" inputMode="numeric" {...form.register('defaultTimeoutMs')} />
-                    </Field>
-                    <Field
-                      label={t.editor.runTimeout}
-                      htmlFor="run-timeout"
-                      error={issues.get('runTimeoutMs')}
-                      hint={t.editor.runTimeoutHint}
-                    >
-                      <Input id="run-timeout" inputMode="numeric" {...form.register('runTimeoutMs')} />
-                    </Field>
-                  </div>
-                </div>
-              </details>
-            </TabsContent>
-            <TabsContent value="json" className="mt-3 flex flex-col gap-2">
-              <Suspense fallback={<Loading />}>
-                <JsonEditor value={json} onChange={setJson} />
-              </Suspense>
-              {jsonError ? (
-                <pre role="alert" className="whitespace-pre-wrap rounded-md bg-destructive/5 p-2 text-xs text-destructive">
-                  {jsonError}
-                </pre>
-              ) : null}
-              <Button variant="outline" className="self-start" onClick={applyJson}>
-                {t.editor.applyJson}
-              </Button>
-            </TabsContent>
-          </Tabs>
-        </div>
-
-        <aside className="flex flex-col gap-3">
-          <Card>
-            <CardHeader>
-              <CardTitle>{t.editor.history}</CardTitle>
-            </CardHeader>
-            {runs.isPending ? (
-              <Loading />
-            ) : runs.isError ? (
-              <ErrorState error={runs.error} />
-            ) : runs.data.length === 0 ? (
-              <p className="p-4 text-xs text-muted-foreground">{t.common.never}</p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {runs.data.map((run) => (
-                  <li key={run.id}>
-                    <Link
-                      to="/runs/$runId"
-                      params={{ runId: run.id }}
-                      className="flex items-center justify-between gap-2 px-4 py-2 text-xs hover:bg-muted"
-                    >
-                      <StatusBadge status={run.status} />
-                      <span className="text-muted-foreground">{formatDateTime(run.createdAt)}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
-        </aside>
-      </form>
-      {running ? (
-        <RunDialog projectId={testCase.projectId} testCaseId={testCase.id} inputs={savedInputs} onClose={() => setRunning(false)} />
-      ) : null}
-    </FormProvider>
+                </ul>
+              )}
+            </Card>
+          </aside>
+        </form>
+        {running ? (
+          <RunDialog
+            authProfileId={definition.authProfileId}
+            projectId={testCase.projectId}
+            testCaseId={testCase.id}
+            inputs={savedInputs}
+            onClose={() => setRunning(false)}
+          />
+        ) : null}
+      </FormProvider>
+    </EditorContext.Provider>
   );
 }

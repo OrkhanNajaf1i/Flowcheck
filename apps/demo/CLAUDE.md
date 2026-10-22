@@ -11,7 +11,8 @@ Spec: PROJECT_RULES §19.
   - every product button is named "Add to cart" (ambiguous role locator);
   - `GET /api/admin-only` always returns 403.
 - Cart is cookie-session based (`demo_session`) so UI and API steps share the session through browser cookies.
-- Phase 3+ will add: a page with a service worker, a login page for auth profiles, an SPA route for the recorder.
+- `/login` + `/account` (password `demo-password`) for login sessions; `/spa` is a single-page app whose routes change with `history.pushState` (recorder).
+- Still to add (phase 5): a page with a service worker.
 
 ## Tests
 `pnpm --filter @flowcheck/demo test` — bug-mode behaviour via `app.inject`.

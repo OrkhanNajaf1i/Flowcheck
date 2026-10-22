@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { type DatabaseHandle, openDatabase } from '@flowcheck/db';
 import type { FastifyInstance, InjectOptions } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { loadAccessToken, sessionCookieName, sessionValue } from '../src/access.ts';
 import { buildServer } from '../src/app.ts';
 import { loadConfig } from '../src/config.ts';
 
@@ -13,12 +14,14 @@ let app: FastifyInstance;
 
 const HOST = '127.0.0.1:4310';
 const ORIGIN = 'http://127.0.0.1:4310';
+const TOKEN = 'test-access-token-0123456789abcdefghij';
+const COOKIE = `${sessionCookieName(4310)}=${sessionValue(TOKEN)}`;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'flowcheck-server-'));
   const config = loadConfig({ FLOWCHECK_DATA_DIR: dir });
   handle = openDatabase(config.dbFile);
-  app = await buildServer(handle.db, config);
+  app = await buildServer(handle.db, config, { accessToken: TOKEN });
 });
 
 afterEach(async () => {
@@ -31,7 +34,7 @@ function call(method: InjectOptions['method'], url: string, payload?: unknown, h
   return app.inject({
     method,
     url,
-    headers: { host: HOST, ...(method === 'GET' ? {} : { origin: ORIGIN }), ...headers },
+    headers: { host: HOST, cookie: COOKIE, ...(method === 'GET' ? {} : { origin: ORIGIN }), ...headers },
     ...(payload === undefined ? {} : { payload: payload as Record<string, unknown> }),
   });
 }
@@ -202,5 +205,116 @@ describe('project deletion', () => {
     const { project } = await seed();
     const res = await call('DELETE', `/api/projects/${project.id}`, undefined, { origin: 'http://evil.example' });
     expect(res.json().error.code).toBe('FORBIDDEN_ORIGIN');
+  });
+});
+
+describe('secrets', () => {
+  const VALUE = 'Pa55word-for-tests';
+
+  it('never return the value and enforce the minimum length', async () => {
+    const { project } = await seed();
+    const created = await call('POST', `/api/projects/${project.id}/secrets`, { name: 'testPassword', value: VALUE });
+    expect(created.statusCode).toBe(201);
+    expect(created.body).not.toContain(VALUE);
+    const list = await call('GET', `/api/projects/${project.id}/secrets`);
+    expect(list.json().map((s: { name: string }) => s.name)).toEqual(['testPassword']);
+    expect(list.body).not.toContain(VALUE);
+
+    const short = await call('POST', `/api/projects/${project.id}/secrets`, { name: 'pin', value: '1234' });
+    expect(short.json().error.code).toBe('SECRET_TOO_SHORT');
+    expect(short.body).not.toContain('1234"');
+
+    const replaced = await call('PUT', `/api/secrets/${created.json().id}`, { value: 'another-long-value' });
+    expect(replaced.statusCode).toBe(200);
+    expect(replaced.body).not.toContain('another-long-value');
+  });
+
+  it('a run that needs a missing secret does not start', async () => {
+    const { project, env } = await seed();
+    const def = {
+      ...definition,
+      inputs: [],
+      steps: [
+        {
+          id: 'pw',
+          name: 'Password',
+          type: 'fill',
+          locator: { kind: 'label', value: 'Password', exact: true },
+          value: '{{secrets.testPassword}}',
+        },
+      ],
+    };
+    const tc = (await call('POST', `/api/projects/${project.id}/test-cases`, { name: 'Login', definition: def })).json();
+    const refused = await call('POST', `/api/test-cases/${tc.testCase.id}/runs`, { environmentId: env.id });
+    expect(refused.json().error.code).toBe('SECRET_NOT_FOUND');
+    expect(refused.json().error.details.missing).toEqual(['testPassword']);
+
+    await call('POST', `/api/projects/${project.id}/secrets`, { name: 'testPassword', value: VALUE });
+    expect((await call('POST', `/api/test-cases/${tc.testCase.id}/runs`, { environmentId: env.id })).statusCode).toBe(202);
+  });
+});
+
+describe('recordings', () => {
+  it('start with 202 and the lock, return a draft that opens the start page, and stop idempotently', async () => {
+    const { project, env, testCase } = await seed();
+    const started = await call('POST', `/api/projects/${project.id}/recordings`, {
+      environmentId: env.id,
+      startPath: '/form',
+      testCaseId: testCase.id,
+    });
+    expect(started.statusCode).toBe(202);
+    expect(started.json()).toMatchObject({ status: 'starting', eventCount: 0, steps: [{ type: 'navigate', url: '/form' }], warnings: [] });
+
+    const busy = await call('POST', `/api/projects/${project.id}/recordings`, { environmentId: env.id });
+    expect(busy.statusCode).toBe(409);
+    expect(busy.json().error.code).toBe('EXECUTION_LOCK_BUSY');
+
+    const id = started.json().id;
+    expect((await call('POST', `/api/recordings/${id}/stop`)).json().status).toBe('stopped');
+    expect((await call('POST', `/api/recordings/${id}/stop`)).json().status).toBe('stopped');
+    expect((await call('GET', `/api/recordings/${id}`)).json().steps).toHaveLength(1);
+  });
+
+  it('reject a start path that leaves the website', async () => {
+    const { project, env } = await seed();
+    const res = await call('POST', `/api/projects/${project.id}/recordings`, { environmentId: env.id, startPath: '//evil.example' });
+    expect(res.statusCode).toBe(400);
+  });
+});
+
+describe('local access token', () => {
+  it('refuses API requests without the session cookie, also for artifacts', async () => {
+    for (const url of ['/api/projects', '/api/runs/x/artifacts/y']) {
+      const res = await app.inject({ method: 'GET', url, headers: { host: HOST } });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().error.code).toBe('UNAUTHORIZED');
+    }
+    const forged = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { host: HOST, cookie: `${sessionCookieName(4310)}=${TOKEN}` },
+    });
+    expect(forged.statusCode).toBe(401);
+  });
+
+  it('exchanges the printed link for an HttpOnly SameSite=Strict cookie and redirects to the UI', async () => {
+    const res = await app.inject({ method: 'GET', url: `/api/session?token=${TOKEN}`, headers: { host: HOST } });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe('/');
+    const cookie = String(res.headers['set-cookie']);
+    expect(cookie).toContain(`${sessionCookieName(4310)}=${sessionValue(TOKEN)}`);
+    expect(cookie).toMatch(/HttpOnly/);
+    expect(cookie).toMatch(/SameSite=Strict/);
+    expect(cookie).not.toContain(TOKEN);
+    const wrong = await app.inject({ method: 'GET', url: '/api/session?token=nope', headers: { host: HOST } });
+    expect(wrong.statusCode).toBe(401);
+    expect(wrong.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('keeps the token in data/ across restarts', () => {
+    const first = loadAccessToken(dir, {});
+    expect(first.length).toBeGreaterThanOrEqual(32);
+    expect(loadAccessToken(dir, {})).toBe(first);
+    expect(() => loadAccessToken(dir, { FLOWCHECK_ACCESS_TOKEN: 'short' })).toThrow(/at least 32/);
   });
 });

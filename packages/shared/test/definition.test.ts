@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseDefinition } from '../src/definition.ts';
+import { parseDefinition, referencedSecrets } from '../src/definition.ts';
 import { ERROR_CODES } from '../src/errors.ts';
 import { looksGeneratedId } from '../src/locator.ts';
 import { parseTemplate } from '../src/templates.ts';
@@ -22,6 +22,13 @@ function issues(input: unknown): string[] {
 }
 
 describe('parseDefinition', () => {
+  it('allows a screenshot after a passed step only on page steps', () => {
+    const click = { id: 'c', name: 'Click', type: 'click', locator: { kind: 'testId', value: 'x' }, screenshot: true };
+    const apiStep = { id: 'a', name: 'API', type: 'apiRequest', method: 'GET', path: '/', assertions: [], screenshot: true };
+    expect(issues({ ...base, steps: [navigate, click] })).toEqual([]);
+    expect(issues({ ...base, steps: [apiStep] }).join()).toMatch(/screenshot/);
+  });
+
   it('accepts a minimal valid definition', () => {
     expect(issues({ ...base, steps: [navigate] })).toEqual([]);
   });
@@ -180,5 +187,94 @@ describe('looksGeneratedId', () => {
     for (const id of ['account-btn', 'login', 'user-menu', 'email-input', 'download', 'added']) {
       expect(looksGeneratedId(id), id).toBe(false);
     }
+  });
+});
+
+describe('network checks and outputs', () => {
+  const click = (extra: Record<string, unknown> = {}) => ({
+    id: 'place',
+    name: 'Place order',
+    type: 'click',
+    locator: { kind: 'testId', value: 'place-order' },
+    networkChecks: [
+      {
+        id: 'create',
+        name: 'Order created',
+        match: { origin: 'api', method: 'POST', pathname: '/api/orders' },
+        assertions: [{ kind: 'statusEquals', expected: 201 }],
+        outputs: [{ name: 'orderId', from: 'json', pointer: '/id' }],
+      },
+    ],
+    ...extra,
+  });
+  const readOrder = { id: 'read', name: 'Read', type: 'apiRequest', method: 'GET', path: '/orders/{{outputs.orderId}}', assertions: [] };
+
+  it('lets later steps and cleanup use an output', () => {
+    const cleanup = [
+      { id: 'del', name: 'Delete', type: 'apiRequest', method: 'DELETE', path: '/orders/{{outputs.orderId}}', assertions: [] },
+    ];
+    expect(issues({ ...base, steps: [click(), readOrder], cleanupSteps: cleanup })).toEqual([]);
+  });
+
+  it('rejects using an output before the step that sets it', () => {
+    expect(issues({ ...base, steps: [readOrder, click()] }).join()).toContain('{{outputs.orderId}} is not set by any earlier step');
+    expect(issues({ ...base, steps: [readOrder] }).join()).toContain('not set by any earlier step');
+  });
+
+  it('rejects setting the same output twice', () => {
+    const second = { ...readOrder, id: 'again', path: '/orders', outputs: [{ name: 'orderId', from: 'json', pointer: '/0/id' }] };
+    expect(issues({ ...base, steps: [click(), second] }).join()).toContain('Output "orderId" is already set');
+  });
+
+  it('validates the matcher', () => {
+    const bad = click();
+    bad.networkChecks[0] = {
+      ...bad.networkChecks[0],
+      match: { origin: 'https://api.example.com/v1', method: 'POST', pathname: 'api/orders' },
+    } as never;
+    const result = issues({ ...base, steps: [bad] }).join();
+    expect(result).toContain('Origin must look like');
+    expect(result).toContain('Path must start with "/"');
+  });
+
+  it('only allows network checks on action steps', () => {
+    const visible = { id: 'v', name: 'v', type: 'assertVisible', locator: { kind: 'testId', value: 'x' }, networkChecks: [] };
+    expect(issues({ ...base, steps: [visible] }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('secrets in definitions', () => {
+  const fill = {
+    id: 'pw',
+    name: 'Password',
+    type: 'fill',
+    locator: { kind: 'label', value: 'Password', exact: true },
+    value: '{{secrets.testPassword}}',
+  };
+  const api = (extra: Record<string, unknown>) => ({
+    id: 'a',
+    name: 'a',
+    type: 'apiRequest',
+    method: 'GET',
+    path: '/me',
+    assertions: [],
+    ...extra,
+  });
+
+  it('are allowed in fill values and headers, and listed', () => {
+    const def = { ...base, steps: [fill, api({ headers: { Authorization: 'Bearer {{secrets.apiToken}}' } })] };
+    expect(issues(def)).toEqual([]);
+    const parsed = parseDefinition(def);
+    expect(parsed.ok && referencedSecrets(parsed.definition)).toEqual(['apiToken', 'testPassword']);
+  });
+
+  it('are rejected in paths, URLs and assertions', () => {
+    expect(issues({ ...base, steps: [api({ path: '/users/{{secrets.apiToken}}' })] }).join()).toContain('secrets are not allowed');
+    expect(issues({ ...base, steps: [{ id: 'n', name: 'n', type: 'navigate', url: '/?t={{secrets.apiToken}}' }] }).join()).toContain(
+      'secrets are not allowed',
+    );
+    expect(
+      issues({ ...base, steps: [api({ assertions: [{ kind: 'textContains', expected: '{{secrets.apiToken}}' }] })] }).join(),
+    ).toContain('secrets are not allowed');
   });
 });

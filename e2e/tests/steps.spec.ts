@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createProjectWithEnv, definition, runTest, stepStatuses } from './helpers.ts';
+import { AUTH, createProjectWithEnv, definition, runTest, SERVER, stepStatuses } from './helpers.ts';
 
 const id = (value: string) => ({ kind: 'testId', value });
 const label = (value: string) => ({ kind: 'label', value, exact: true });
@@ -236,4 +236,23 @@ test('a scoped locator tells apart elements with the same text', async () => {
     ]),
   );
   expect(run3.steps.find((s) => s.stepId === 'noContainer')?.errorMessage).toContain('No container matches');
+});
+
+test('a passed step keeps a screenshot only when the step asks for one', async () => {
+  const { projectId, envId } = await createProjectWithEnv();
+  const run = await runTest(
+    projectId,
+    envId,
+    definition([
+      { id: 'open', name: 'Open', type: 'navigate', url: '/form' },
+      { id: 'account', name: 'Account', type: 'click', locator: { kind: 'role', role: 'button', name: 'Account' }, screenshot: true },
+    ]),
+  );
+  expect(run.status).toBe('passed');
+  expect(run.steps[0]?.artifacts).toEqual([]);
+  const [shot] = run.steps[1]?.artifacts ?? [];
+  expect(shot).toMatchObject({ type: 'screenshot', mimeType: 'image/png', sensitive: true });
+  const res = await fetch(`${SERVER}/api/runs/${run.id}/artifacts/${shot?.id}`, { headers: AUTH });
+  expect(res.status).toBe(200);
+  expect(res.headers.get('content-type')).toContain('image/png');
 });

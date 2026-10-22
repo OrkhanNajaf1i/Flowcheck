@@ -12,6 +12,8 @@ export interface ServerConfig {
   allowedHosts: string[];
   /** Origin header values accepted on state-changing requests. */
   allowedOrigins: string[];
+  /** Artifact retention (PROJECT_RULES §16): 30 days and 500 MB per project by default. */
+  retention: { maxAgeMs: number; projectQuotaBytes: number };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -29,5 +31,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     webDistDir: env.FLOWCHECK_SERVE_WEB === '0' ? undefined : resolve(import.meta.dirname, '../../web/dist'),
     allowedHosts: hosts,
     allowedOrigins: hosts.map((h) => `http://${h}`),
+    retention: {
+      maxAgeMs: positive(env.FLOWCHECK_ARTIFACT_RETENTION_DAYS, 30) * 24 * 60 * 60 * 1000,
+      projectQuotaBytes: positive(env.FLOWCHECK_ARTIFACT_QUOTA_MB, 500) * 1024 * 1024,
+    },
   };
+}
+
+/** A positive number from the environment, or the default (invalid values are not guessed at). */
+function positive(raw: string | undefined, fallback: number): number {
+  if (raw === undefined || raw === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`Expected a positive number, got "${raw}"`);
+  return value;
 }

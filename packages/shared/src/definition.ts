@@ -49,6 +49,15 @@ const stepBase = {
   timeoutMs: stepTimeout.optional(),
 };
 
+/**
+ * Steps that work on the page. A screenshot is always taken when one fails; `screenshot: true`
+ * also keeps one after it passes, as visual evidence (it is not a check by itself).
+ */
+const uiStepBase = {
+  ...stepBase,
+  screenshot: z.boolean().optional(),
+};
+
 export const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const;
 
 /** Methods that are never retried and that the editor marks as state-changing. */
@@ -95,28 +104,73 @@ export const apiAuthSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('browserCookies') }),
 ]);
 
+/**
+ * Takes a value from a passed response and stores it as {{outputs.<name>}} for later steps.
+ * Only primitives (string, number, boolean, null) can be stored; objects/arrays are rejected.
+ */
+export const outputMappingSchema = z.discriminatedUnion('from', [
+  z.strictObject({
+    name: z.string().refine(isValidVariableName, 'Invalid output name'),
+    from: z.literal('json'),
+    pointer: jsonPointerSchema,
+  }),
+  z.strictObject({ name: z.string().refine(isValidVariableName, 'Invalid output name'), from: z.literal('header'), header: headerName }),
+]);
+export type OutputMapping = z.infer<typeof outputMappingSchema>;
+
+/** "api" / "frontend" take the origin from the run's environment; otherwise an explicit origin. */
+export const networkOriginSchema = z.union([
+  z.enum(['api', 'frontend']),
+  z.string().regex(/^https?:\/\/[^/?#\s]+$/, 'Origin must look like https://api.example.com (no path)'),
+]);
+
+/**
+ * Observes a request the browser sends because of the step's action (PROJECT_RULES §10):
+ * matched by origin, method, exact pathname and selected query parameters — never by status.
+ */
+export const networkCheckSchema = z.strictObject({
+  id: stepId,
+  name: z.string().min(1).max(200),
+  match: z.strictObject({
+    origin: networkOriginSchema,
+    method: z.enum(HTTP_METHODS),
+    /** Exact pathname, e.g. /api/orders. */
+    pathname: template(500),
+    query: z.record(z.string().min(1).max(200), template(500)).optional(),
+  }),
+  timeoutMs: stepTimeout.optional(),
+  assertions: z.array(responseAssertionSchema).max(50),
+  outputs: z.array(outputMappingSchema).max(20).optional(),
+});
+export type NetworkCheck = z.infer<typeof networkCheckSchema>;
+
+const networkChecks = z.array(networkCheckSchema).max(5).optional();
+
 export const navigateStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('navigate'),
   /** Path starting with "/" (resolved against frontendBaseUrl) or an absolute http(s) URL. */
   url: template(),
+  networkChecks,
 });
 
 export const clickStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('click'),
   locator: locatorSchema,
+  networkChecks,
 });
 
 export const fillStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('fill'),
   locator: locatorSchema,
   value: template(),
+  networkChecks,
 });
 
 export const assertVisibleStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertVisible'),
   locator: locatorSchema,
 });
@@ -125,7 +179,7 @@ export const TEXT_MATCH_MODES = ['exact', 'contains'] as const;
 
 /** The element's visible text equals / contains the expected text. Missing element ≠ empty text. */
 export const assertTextStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertText'),
   locator: locatorSchema,
   expected: template(),
@@ -139,21 +193,21 @@ export const assertTextStepSchema = z.strictObject({
  * step fails if at least one match is visible. Several matches are evaluated, never first().
  */
 export const assertHiddenStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertHidden'),
   locator: locatorSchema,
 });
 
 /** The input / textarea / select value equals the expected text exactly. */
 export const assertValueStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertValue'),
   locator: locatorSchema,
   expected: template(),
 });
 
 export const assertEnabledStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertEnabled'),
   locator: locatorSchema,
 });
@@ -163,7 +217,7 @@ export const URL_QUERY_MODES = ['ignore', 'include'] as const;
 
 /** Default: pathname only, query ignored. Hash is never compared. */
 export const assertUrlStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('assertUrl'),
   expected: template(),
   match: z.enum(URL_MATCH_MODES),
@@ -173,18 +227,19 @@ export const assertUrlStepSchema = z.strictObject({
 export const OPTION_SELECTORS = ['label', 'value'] as const;
 
 export const selectOptionStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('selectOption'),
   locator: locatorSchema,
   option: z.strictObject({ by: z.enum(OPTION_SELECTORS), value: template(500) }),
+  networkChecks,
 });
 
-export const checkStepSchema = z.strictObject({ ...stepBase, type: z.literal('check'), locator: locatorSchema });
-export const uncheckStepSchema = z.strictObject({ ...stepBase, type: z.literal('uncheck'), locator: locatorSchema });
+export const checkStepSchema = z.strictObject({ ...uiStepBase, type: z.literal('check'), locator: locatorSchema, networkChecks });
+export const uncheckStepSchema = z.strictObject({ ...uiStepBase, type: z.literal('uncheck'), locator: locatorSchema, networkChecks });
 
 /** Presses a key combination on an element (focused first) or, without a locator, on the page. */
 export const pressStepSchema = z.strictObject({
-  ...stepBase,
+  ...uiStepBase,
   type: z.literal('press'),
   locator: locatorSchema.optional(),
   key: z
@@ -194,6 +249,7 @@ export const pressStepSchema = z.strictObject({
       const result = parseKeyCombination(value);
       if (!result.ok) ctx.addIssue({ code: 'custom', message: result.message, params: { errorCode: 'UNSUPPORTED_KEYBOARD_COMBINATION' } });
     }),
+  networkChecks,
 });
 
 export const apiRequestStepSchema = z.strictObject({
@@ -207,6 +263,7 @@ export const apiRequestStepSchema = z.strictObject({
   body: z.json().optional(),
   auth: apiAuthSchema.optional(),
   assertions: z.array(responseAssertionSchema).max(50),
+  outputs: z.array(outputMappingSchema).max(20).optional(),
 });
 
 export const stepSchema = z.discriminatedUnion('type', [
@@ -236,6 +293,19 @@ export type AssertTextStep = z.infer<typeof assertTextStepSchema>;
 export type AssertUrlStep = z.infer<typeof assertUrlStepSchema>;
 export type SelectOptionStep = z.infer<typeof selectOptionStepSchema>;
 export type PressStep = z.infer<typeof pressStepSchema>;
+
+/** Step types that perform a browser action and may carry network checks. */
+export const NETWORK_CHECK_STEP_TYPES = ['navigate', 'click', 'fill', 'selectOption', 'check', 'uncheck', 'press'] as const;
+
+export function stepNetworkChecks(step: Step): NetworkCheck[] {
+  return 'networkChecks' in step ? (step.networkChecks ?? []) : [];
+}
+
+/** Output names a step publishes when it passes. */
+export function stepOutputs(step: Step): string[] {
+  const own = step.type === 'apiRequest' ? (step.outputs ?? []) : [];
+  return [...own, ...stepNetworkChecks(step).flatMap((check) => check.outputs ?? [])].map((o) => o.name);
+}
 
 export const INPUT_TYPES = ['string', 'number', 'boolean'] as const;
 
@@ -301,6 +371,18 @@ function stepTemplates(step: Step): { path: (string | number)[]; value: string; 
     case 'press':
       break;
   }
+  stepNetworkChecks(step).forEach((check, c) => {
+    const base = ['networkChecks', c];
+    out.push({ path: [...base, 'match', 'pathname'], value: check.match.pathname, secretsAllowed: false });
+    for (const [key, value] of Object.entries(check.match.query ?? {})) {
+      out.push({ path: [...base, 'match', 'query', key], value, secretsAllowed: false });
+    }
+    check.assertions.forEach((assertion, index) => {
+      if ('expected' in assertion && typeof assertion.expected === 'string') {
+        out.push({ path: [...base, 'assertions', index, 'expected'], value: assertion.expected, secretsAllowed: false });
+      }
+    });
+  });
   return out;
 }
 
@@ -316,6 +398,8 @@ export const testDefinitionV1Schema = z
     cleanupSteps: z.array(stepSchema).max(100),
     defaultTimeoutMs: stepTimeout.optional(),
     runTimeoutMs: runTimeout.optional(),
+    /** Saved login session loaded into every run; it must belong to the run's environment. */
+    authProfileId: z.string().min(1).max(64).optional(),
   })
   .superRefine((def, ctx) => {
     const seenInputs = new Set<string>();
@@ -327,6 +411,9 @@ export const testDefinitionV1Schema = z
     });
 
     const seenSteps = new Set<string>();
+    /** Outputs published by steps that run before the current one (setup → main → cleanup). */
+    const availableOutputs = new Set<string>();
+    const declaredOutputs = new Set<string>();
     const phases = [
       ['setupSteps', def.setupSteps],
       ['steps', def.steps],
@@ -371,6 +458,20 @@ export const testDefinitionV1Schema = z
           }
         }
 
+        stepNetworkChecks(step).forEach((check, c) => {
+          if (!check.match.pathname.startsWith('/')) {
+            ctx.addIssue({
+              code: 'custom',
+              path: [phaseKey, index, 'networkChecks', c, 'match', 'pathname'],
+              message: 'Path must start with "/", e.g. /api/orders',
+            });
+          }
+          if (seenSteps.has(check.id)) {
+            ctx.addIssue({ code: 'custom', path: [phaseKey, index, 'networkChecks', c, 'id'], message: `Duplicate id "${check.id}"` });
+          }
+          seenSteps.add(check.id);
+        });
+
         for (const tpl of stepTemplates(step)) {
           const parsed = parseTemplate(tpl.value);
           if (!parsed.ok) {
@@ -381,6 +482,15 @@ export const testDefinitionV1Schema = z
             checkRef(ref, tpl.secretsAllowed, [phaseKey, index, ...tpl.path]);
           }
         }
+
+        // Outputs become available only to later steps, and each name may be declared once.
+        for (const name of stepOutputs(step)) {
+          if (declaredOutputs.has(name)) {
+            ctx.addIssue({ code: 'custom', path: [phaseKey, index], message: `Output "${name}" is already set by an earlier step` });
+          }
+          declaredOutputs.add(name);
+        }
+        for (const name of stepOutputs(step)) availableOutputs.add(name);
       });
     }
 
@@ -395,9 +505,8 @@ export const testDefinitionV1Schema = z
           message: `${ref.raw}: secrets are not allowed in URLs, paths, query parameters or assertions`,
         });
       }
-      if (ref.namespace === 'outputs' || ref.namespace === 'secrets') {
-        // Outputs and secrets are introduced in implementation phase 3.
-        ctx.addIssue({ code: 'custom', path, message: `${ref.raw}: "${ref.namespace}" variables are not supported yet` });
+      if (ref.namespace === 'outputs' && !availableOutputs.has(ref.name)) {
+        ctx.addIssue({ code: 'custom', path, message: `${ref.raw} is not set by any earlier step` });
       }
     }
   });
@@ -458,6 +567,17 @@ export function resolveInputs(def: TestDefinition, provided: Record<string, Inpu
     values[input.name] = value;
   }
   return issues.length > 0 ? { ok: false, issues } : { ok: true, values };
+}
+
+/** Names of all secrets a definition refers to ({{secrets.name}}), sorted and unique. */
+export function referencedSecrets(def: TestDefinition): string[] {
+  const names = new Set<string>();
+  for (const { step } of allSteps(def)) {
+    for (const tpl of stepTemplates(step)) {
+      for (const ref of templateRefs(tpl.value)) if (ref.namespace === 'secrets') names.add(ref.name);
+    }
+  }
+  return [...names].sort();
 }
 
 export function allSteps(def: TestDefinition) {

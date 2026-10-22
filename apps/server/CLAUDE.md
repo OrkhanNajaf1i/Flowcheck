@@ -19,7 +19,8 @@ Spec: PROJECT_RULES §15, §16, §17, §18.
 - No CORS plugin, no CORS headers.
 - Helmet CSP is `'self'` based; Monaco workers need `worker-src blob:` (already set).
 - Artifacts are served only via `/api/runs/:runId/artifacts/:artifactId` with the run↔artifact relation checked, path resolved inside the artifacts root, `nosniff` + `CSP: sandbox`.
-- Phase 5 adds the bootstrap token → HttpOnly SameSite=Strict cookie.
+- Access token (`access.ts`): every `/api` request needs the `flowcheck_session_<port>` cookie (HMAC of the token); `GET /api/session?token=` exchanges the printed link for it and redirects to `/`. `buildServer` requires `accessToken`; tests pass a fixed one and send the cookie.
+- Artifact retention (`retention.ts`): at start and every 6 h, by age and per-project quota, never for queued/running runs; rows first, then files (failures logged).
 
 ## Tests
 `pnpm --filter @flowcheck/server test` uses `app.inject` with a temp DB. Requests must send `host: 127.0.0.1:4310` and, for writes, `origin: http://127.0.0.1:4310`.
