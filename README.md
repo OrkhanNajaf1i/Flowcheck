@@ -1,26 +1,25 @@
 # FlowCheck
 
-Local web app for manual and automation QA engineers: define a user scenario, state the expected results for both the UI and the HTTP API, run it in Chromium, and see which step failed, why, and the evidence (screenshots, request/response data).
+Local web app for manual and automation QA engineers: define a user scenario — or record it in a browser — state the expected results for both the UI and the HTTP API, run it in Chromium, and see which step failed, why, and the evidence (screenshots, request/response data).
 
-> **Status: phases 1–2 of 5.** Web UI, test engine, queue/runner and demo shop work and are covered by real end-to-end tests. Not yet available: recorder, network checks on UI actions, output variables, secrets, auth profiles. See [docs/STATUS.md](docs/STATUS.md).
+Everything runs on your own computer: no account, no cloud, your test data stays local.
+
+> **Status:** all five planned phases are implemented — test editor, recorder with suggested checks, UI + API checks, request checks on clicks, secrets, login sessions, run history and reports — and covered by real end-to-end tests. See [docs/STATUS.md](docs/STATUS.md).
 
 FlowCheck reports the results of the checks you configure and what it observed. It does not find all bugs, does not replace QA, and does not claim to know root causes. See [docs/limitations.md](docs/limitations.md).
 
-## Requirements
+Azərbaycan dilində quraşdırma: [docs/install.az.md](docs/install.az.md).
 
-- Node.js 24 LTS (`.nvmrc`)
-- pnpm via Corepack (`corepack enable`)
-- Windows, macOS or Linux
+## Install (once)
 
-## Setup (once)
+You need **Node.js 24 LTS** (https://nodejs.org) and **Git**. Windows, macOS and Linux are supported.
 
 ```sh
-corepack enable
+git clone https://github.com/OrkhanNajaf1i/Flowcheck.git
+cd Flowcheck
+corepack enable        # makes the pinned pnpm version available (once per computer)
 pnpm install
-pnpm playwright:install     # Chromium for the pinned Playwright version
 ```
-
-Use `pnpm playwright:install` (= `pnpm exec playwright install chromium`), not `pnpm dlx`: `dlx` downloads the newest Playwright and may install a Chromium build that does not match the pinned version.
 
 ## Start
 
@@ -28,11 +27,23 @@ Use `pnpm playwright:install` (= `pnpm exec playwright install chromium`), not `
 pnpm start
 ```
 
-The terminal prints a line **`Open FlowCheck: http://127.0.0.1:4310/api/session?token=…`** — open that link once in your browser (it is remembered for 30 days; the link stays the same after restarts and is stored in `data/access.token`). Without it the UI shows "Open FlowCheck with its link" and the API answers `401`: this keeps other programs on your computer from using FlowCheck. This starts the server (API + UI) and the runner (executes tests) in one terminal; `Ctrl+C` stops both. The UI is built automatically on the first start; after pulling UI changes run `pnpm build:web`.
+The first start downloads the Chromium build FlowCheck tests with (about 150 MB) and builds the UI; later starts take a few seconds. If something is missing (wrong Node.js version, `pnpm install` not run), the start stops with one sentence saying what to do.
 
-- `pnpm start:with-demo` also starts the demo shop on http://127.0.0.1:4320 (a practice target).
-- `pnpm dev` runs the UI with hot reload on http://127.0.0.1:5173.
-- Data (SQLite database, screenshots) is stored in `./data` (override with `FLOWCHECK_DATA_DIR`).
+The terminal then prints a line **`Open FlowCheck: http://127.0.0.1:4310/api/session?token=…`** — open that link once in your browser (it is remembered for 30 days; the link stays the same after restarts and is stored in `data/access.token`). Without it the UI shows "Open FlowCheck with its link" and the API answers `401`: this keeps other programs on your computer from using FlowCheck. `Ctrl+C` stops FlowCheck.
+
+- `pnpm start:with-demo` also starts the demo shop on http://127.0.0.1:4320 — a safe practice target with deliberate bugs.
+- `pnpm dev` runs the UI with hot reload on http://127.0.0.1:5173 (for development of FlowCheck itself).
+- Data (SQLite database, screenshots) is stored in `./data` (override with `FLOWCHECK_DATA_DIR`). Back it up together with `data/master.key`: without the key, saved secrets and login sessions cannot be read.
+
+## Update
+
+```sh
+git pull
+pnpm install
+pnpm start             # rebuilds the UI automatically when it changed
+```
+
+Your data in `./data` is kept; database migrations run automatically.
 
 ## Testing your own website
 

@@ -1,11 +1,11 @@
 /**
  * Starts several FlowCheck processes in one terminal with prefixed output.
- *   node scripts/run.ts start [--demo]   build UI if missing, then server + runner (UI at http://127.0.0.1:4310)
+ *   node scripts/run.ts start [--demo]   build UI if missing or outdated, then server + runner (UI at http://127.0.0.1:4310)
  *   node scripts/run.ts dev [--demo]     Vite (UI at http://127.0.0.1:5173) + server + runner with --watch
  * Ctrl+C stops all of them; if one exits, the others are stopped too.
  */
 import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
@@ -13,6 +13,25 @@ const mode = process.argv[2] === 'dev' ? 'dev' : 'start';
 const withDemo = process.argv.includes('--demo');
 const envFile = resolve(root, '.env');
 const nodeFlags = [...(existsSync(envFile) ? [`--env-file=${envFile}`] : []), ...(mode === 'dev' ? ['--watch'] : [])];
+
+/** Newest modification time below a directory (files only). */
+function newest(dir: string): number {
+  let latest = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = resolve(dir, entry.name);
+    latest = Math.max(latest, entry.isDirectory() ? newest(path) : statSync(path).mtimeMs);
+  }
+  return latest;
+}
+
+/** No build yet, or the UI sources or shared contracts changed after it (e.g. after "git pull"). */
+function webBuildOutdated(): boolean {
+  const built = resolve(root, 'apps/web/dist/index.html');
+  if (!existsSync(built)) return true;
+  const sources = ['apps/web/src', 'apps/web/index.html', 'packages/shared/src'].map((p) => resolve(root, p));
+  const changed = Math.max(...sources.filter(existsSync).map((p) => (statSync(p).isDirectory() ? newest(p) : statSync(p).mtimeMs)));
+  return changed > statSync(built).mtimeMs;
+}
 
 interface Proc {
   name: string;
@@ -32,8 +51,8 @@ if (withDemo)
 const viteBin = resolve(root, 'apps/web/node_modules/vite/bin/vite.js');
 if (mode === 'dev') {
   procs.push({ name: 'web', color: 32, command: process.execPath, args: [viteBin], cwd: resolve(root, 'apps/web') });
-} else if (!existsSync(resolve(root, 'apps/web/dist/index.html'))) {
-  console.log('Building the web UI (first start only; run "pnpm build:web" after UI changes)…');
+} else if (webBuildOutdated()) {
+  console.log('Building the web UI (first start, or the UI changed since the last build)…');
   const build = spawnSync(process.execPath, [viteBin, 'build'], { cwd: resolve(root, 'apps/web'), stdio: 'inherit' });
   if (build.status !== 0) process.exit(build.status ?? 1);
 }

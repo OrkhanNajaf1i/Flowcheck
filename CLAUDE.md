@@ -50,8 +50,8 @@ pnpm workspace. `apps/server` (Fastify) and `apps/runner` (Playwright worker) ar
 ## Commands (all verified)
 ```
 corepack enable && pnpm install
-pnpm playwright:install          # Chromium for the pinned Playwright version (never `pnpm dlx`)
-pnpm start                       # server + runner, UI at http://127.0.0.1:4310 (builds UI on first start)
+pnpm playwright:install          # Chromium for the pinned Playwright version (never `pnpm dlx`); pnpm start also does it via scripts/preflight.mjs
+pnpm start                       # preflight (Node 24, deps, Chromium) + server + runner, UI at http://127.0.0.1:4310 (rebuilds UI when outdated)
 pnpm start:with-demo             # + demo shop on 4320
 pnpm dev                         # Vite UI on 5173 + server + runner with --watch
 pnpm build:web                   # rebuild UI for pnpm start
